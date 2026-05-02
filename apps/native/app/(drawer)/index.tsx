@@ -353,6 +353,23 @@ export default function Home() {
         {errorMessage && state !== "error" ? (
           <Text className="mt-3 text-sm text-danger">{errorMessage}</Text>
         ) : null}
+
+        <Animated.View entering={FadeInDown.delay(180).duration(220)} className="mt-6 gap-3">
+          <View className="space-y-1">
+            <Text className="text-lg font-semibold text-foreground">Popular conversions</Text>
+            <Text className="text-sm text-muted">Quick ideas to help you start faster.</Text>
+          </View>
+
+          <View className="flex-row flex-wrap gap-2">
+            {["MP4 to MP3", "MP4 to MP4", "MP3 to MP3", "JPG to PNG", "PNG to JPG", "WEBP to PNG"].map(
+              (label) => (
+                <View key={label} className="rounded-2xl border border-border bg-card px-3 py-2">
+                  <Text className="text-xs font-medium text-foreground">{label}</Text>
+                </View>
+              ),
+            )}
+          </View>
+        </Animated.View>
       </View>
     </Container>
   );

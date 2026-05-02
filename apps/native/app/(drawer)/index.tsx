@@ -7,9 +7,9 @@ import {
   startConversion,
   validateConversionPair,
   type ConversionFile,
-  type ConversionRecentItem,
   type ConversionState,
   type OutputFormat,
+  type RecentItem,
 } from "@MediaConvertor/conversion";
 import { env } from "@MediaConvertor/env/native";
 import * as DocumentPicker from "expo-document-picker";
@@ -175,14 +175,13 @@ export default function Home() {
       if (result.state === "completed" && result.success) {
         setJobId(result.success.jobId);
 
-        const item: ConversionRecentItem = {
+        const item: RecentItem = {
           id: result.success.jobId,
-          inputName: selectedFile.name,
-          outputName: `converted-${result.success.jobId}.${outputFormat}`,
-          outputFormat,
-          quality: "medium",
-          sizeBytes: result.success.sizeBytes,
-          createdAt: new Date().toISOString(),
+          fileName: selectedFile.name,
+          inputFormat: getFileExtension(selectedFile.name).toUpperCase(),
+          outputFormat: outputFormat.toUpperCase(),
+          createdAt: Date.now(),
+          uri: `${env.EXPO_PUBLIC_SERVER_URL}/download/${result.success.jobId}`,
         };
 
         const nextRecent = appendRecent(readRecentItems(10), item);

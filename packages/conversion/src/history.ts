@@ -1,11 +1,9 @@
-import type { ConversionRecentItem } from "./types";
+import type { RecentItem } from "./types";
 
 export const RECENT_LIMIT = 10;
 
-export function appendRecent(
-  items: ConversionRecentItem[],
-  item: ConversionRecentItem,
-): ConversionRecentItem[] {
+export function appendRecent(items: RecentItem[], item: RecentItem): RecentItem[] {
   const deduped = items.filter((existing) => existing.id !== item.id);
-  return [item, ...deduped].slice(0, RECENT_LIMIT);
+  const sorted = [item, ...deduped].sort((a, b) => b.createdAt - a.createdAt);
+  return sorted.slice(0, RECENT_LIMIT);
 }

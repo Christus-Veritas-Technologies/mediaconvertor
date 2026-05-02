@@ -10,18 +10,17 @@ import {
   startConversion,
   validateConversionPair,
   type ConversionFile,
-  type ConversionRecentItem,
   type ConversionState,
   type OutputFormat,
+  type RecentItem,
 } from "@MediaConvertor/conversion";
 import { env } from "@MediaConvertor/env/web";
 import { AnimatePresence, motion } from "framer-motion";
-import { UploadCloud } from "lucide-react";
 import { Button } from "@MediaConvertor/ui/components/button";
 import { Card } from "@MediaConvertor/ui/components/card";
 import { useEffect, useMemo, useRef, useState } from "react";
 
-const RECENT_KEY = "mc_recent_items";
+const RECENT_KEY = "recent_conversions";
 const ACCEPTED_FILE_TYPES = ".mp3,.mp4,.jpeg,.jpg,.png,.webp";
 
 const DEFAULT_FORMAT_BY_INPUT: Record<string, OutputFormat> = {
@@ -38,7 +37,7 @@ type ConverterScreenProps = {
   presetId?: string;
 };
 
-function readRecentFromStorage(): ConversionRecentItem[] {
+function readRecentFromStorage(): RecentItem[] {
   if (typeof window === "undefined") {
     return [];
   }
@@ -48,14 +47,14 @@ function readRecentFromStorage(): ConversionRecentItem[] {
     if (!raw) {
       return [];
     }
-    const parsed = JSON.parse(raw) as ConversionRecentItem[];
+    const parsed = JSON.parse(raw) as RecentItem[];
     return Array.isArray(parsed) ? parsed : [];
   } catch {
     return [];
   }
 }
 
-function writeRecentToStorage(items: ConversionRecentItem[]) {
+function writeRecentToStorage(items: RecentItem[]) {
   if (typeof window === "undefined") {
     return;
   }
@@ -243,14 +242,13 @@ export default function ConverterScreen({ presetId }: ConverterScreenProps) {
       if (result.state === "completed" && result.success) {
         setJobId(result.success.jobId);
 
-        const item: ConversionRecentItem = {
+        const item: RecentItem = {
           id: result.success.jobId,
-          inputName: selectedFile.name,
-          outputName: `converted-${result.success.jobId}.${outputFormat}`,
-          outputFormat,
-          quality: "medium",
-          sizeBytes: result.success.sizeBytes,
-          createdAt: new Date().toISOString(),
+          fileName: selectedFile.name,
+          inputFormat: getFileExtension(selectedFile.name).toUpperCase(),
+          outputFormat: outputFormat.toUpperCase(),
+          createdAt: Date.now(),
+          uri: `${env.NEXT_PUBLIC_SERVER_URL}/download/${result.success.jobId}`,
         };
 
         const next = appendRecent(readRecentFromStorage(), item);
@@ -349,7 +347,7 @@ export default function ConverterScreen({ presetId }: ConverterScreenProps) {
                   transition={{ duration: 0.2 }}
                   className="grid min-h-48 place-items-center gap-4 text-center"
                 >
-                  <UploadCloud className="h-10 w-10 text-primary" />
+                  <div className="h-10 w-10 rounded-2xl bg-primary/10" />
                   {selectedFile ? (
                     <div className="space-y-1">
                       <p className="text-base font-medium text-foreground">{selectedFile.name}</p>

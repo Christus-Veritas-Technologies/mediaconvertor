@@ -1,81 +1,55 @@
-import type { ConversionRecentItem } from "@MediaConvertor/conversion";
+import type { RecentItem } from "@MediaConvertor/conversion";
 import * as SQLite from "expo-sqlite";
 
 const db = SQLite.openDatabaseSync("mediaconvertor.db");
 
 function ensureTable() {
   db.execSync(`
-    CREATE TABLE IF NOT EXISTS recent_conversions (
-      id TEXT PRIMARY KEY NOT NULL,
-      input_name TEXT NOT NULL,
-      output_name TEXT NOT NULL,
-      output_format TEXT NOT NULL,
-      quality TEXT NOT NULL,
-      size_bytes INTEGER NOT NULL,
-      created_at TEXT NOT NULL
+    CREATE TABLE IF NOT EXISTS recent (
+      id TEXT PRIMARY KEY,
+      fileName TEXT,
+      inputFormat TEXT,
+      outputFormat TEXT,
+      createdAt INTEGER,
+      uri TEXT
     );
   `);
 }
 
-export function readRecentItems(limit = 10): ConversionRecentItem[] {
+export function readRecentItems(limit = 10): RecentItem[] {
   ensureTable();
-  const rows = db.getAllSync<{
-    id: string;
-    input_name: string;
-    output_name: string;
-    output_format: ConversionRecentItem["outputFormat"];
-    quality: ConversionRecentItem["quality"];
-    size_bytes: number;
-    created_at: string;
-  }>(
-    `SELECT id, input_name, output_name, output_format, quality, size_bytes, created_at
-     FROM recent_conversions
-     ORDER BY datetime(created_at) DESC
+  const rows = db.getAllSync<RecentItem>(
+    `SELECT id, fileName, inputFormat, outputFormat, createdAt, uri
+     FROM recent
+     ORDER BY createdAt DESC
      LIMIT ?;`,
     [limit],
   );
 
-  return rows.map((row: {
-    id: string;
-    input_name: string;
-    output_name: string;
-    output_format: ConversionRecentItem["outputFormat"];
-    quality: ConversionRecentItem["quality"];
-    size_bytes: number;
-    created_at: string;
-  }) => ({
-    id: row.id,
-    inputName: row.input_name,
-    outputName: row.output_name,
-    outputFormat: row.output_format,
-    quality: row.quality,
-    sizeBytes: row.size_bytes,
-    createdAt: row.created_at,
-  }));
+  return rows;
 }
 
-export function saveRecentItem(item: ConversionRecentItem) {
+export function saveRecentItem(item: RecentItem) {
   ensureTable();
 
   db.runSync(
-    `INSERT OR REPLACE INTO recent_conversions
-      (id, input_name, output_name, output_format, quality, size_bytes, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?);`,
-    [
-      item.id,
-      item.inputName,
-      item.outputName,
-      item.outputFormat,
-      item.quality,
-      item.sizeBytes,
-      item.createdAt,
-    ],
+    `INSERT OR REPLACE INTO recent
+      (id, fileName, inputFormat, outputFormat, createdAt, uri)
+     VALUES (?, ?, ?, ?, ?, ?);`,
+    [item.id, item.fileName, item.inputFormat, item.outputFormat, item.createdAt, item.uri],
   );
 
   db.runSync(
-    `DELETE FROM recent_conversions
-     WHERE id NOT IN (
-       SELECT id FROM recent_conversions ORDER BY datetime(created_at) DESC LIMIT 10
+    `DELETE FROM recent
+     WHERE id IN (
+       SELECT id FROM recent ORDER BY createdAt ASC LIMIT (
+         SELECT CASE WHEN COUNT(*) > 10 THEN COUNT(*) - 10 ELSE 0 END FROM recent
+       )
      );`,
   );
+}
+
+export function deleteRecentItem(id: string) {
+  ensureTable();
+  db.runSync(`DELETE FROM recent WHERE id = ?;`, [id]);
 }

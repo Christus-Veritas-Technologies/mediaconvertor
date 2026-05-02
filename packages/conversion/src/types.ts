@@ -47,15 +47,16 @@ export type ConversionSuccess = {
   completedAt: string;
 };
 
-export type ConversionRecentItem = {
+export type RecentItem = {
   id: string;
-  inputName: string;
-  outputName: string;
-  outputFormat: OutputFormat;
-  quality: QualityLevel;
-  sizeBytes: number;
-  createdAt: string;
+  fileName: string;
+  inputFormat: string;
+  outputFormat: string;
+  createdAt: number;
+  uri: string;
 };
+
+export type ConversionRecentItem = RecentItem;
 
 export type ApiErrorPayload = {
   error: string;

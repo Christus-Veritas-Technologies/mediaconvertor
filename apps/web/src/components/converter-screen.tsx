@@ -18,6 +18,7 @@ import { env } from "@MediaConvertor/env/web";
 import { AnimatePresence, motion } from "framer-motion";
 import { Button } from "@MediaConvertor/ui/components/button";
 import { Card } from "@MediaConvertor/ui/components/card";
+import { Cloud, Download } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 const RECENT_KEY = "recent_conversions";
@@ -305,7 +306,7 @@ export default function ConverterScreen({ presetId, defaultConfig }: ConverterSc
         </header>
 
         <motion.div layout transition={{ duration: 0.22 }}>
-          <Card
+          <div
             ref={cardRef}
             role="button"
             tabIndex={isLocked ? -1 : 0}
@@ -338,9 +339,7 @@ export default function ConverterScreen({ presetId, defaultConfig }: ConverterSc
                 void applySelectedFile(file);
               }
             }}
-            className={`rounded-2xl border p-6 transition ${
-              isDragging ? "border-primary bg-secondary" : "border-border bg-card"
-            } ${state === "idle" ? "cursor-pointer" : "cursor-default"}`}
+            className="rounded-3xl bg-gradient-to-br from-purple-500 via-blue-500 to-cyan-500 p-8 transition cursor-pointer"
           >
             <input
               ref={fileInputRef}
@@ -361,19 +360,31 @@ export default function ConverterScreen({ presetId, defaultConfig }: ConverterSc
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -8 }}
                   transition={{ duration: 0.2 }}
-                  className="grid min-h-48 place-items-center gap-4 text-center"
+                  className="grid min-h-56 place-items-center gap-4 text-center"
                 >
-                  <div className="h-10 w-10 rounded-2xl bg-primary/10" />
                   {selectedFile ? (
-                    <div className="space-y-1">
-                      <p className="text-base font-medium text-foreground">{selectedFile.name}</p>
-                      <p className="text-sm text-muted-foreground">{formatFileSize(selectedFile.size)}</p>
-                    </div>
+                    <>
+                      <div className="flex h-16 w-16 items-center justify-center rounded-full bg-white/20">
+                        <Download className="h-8 w-8 text-white" />
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-lg font-semibold text-white">{selectedFile.name}</p>
+                        <p className="text-sm text-white/80">{formatFileSize(selectedFile.size)}</p>
+                      </div>
+                    </>
                   ) : (
-                    <div className="space-y-1">
-                      <p className="text-base font-medium text-foreground">Tap to upload file</p>
-                      <p className="text-sm text-muted-foreground">or drag and drop</p>
-                    </div>
+                    <>
+                      <div className="flex h-16 w-16 items-center justify-center rounded-full bg-white/20">
+                        <Cloud className="h-8 w-8 text-white" />
+                      </div>
+                      <div className="space-y-2">
+                        <p className="text-xl font-semibold text-white">Drag & Drop Your Files Here</p>
+                        <p className="text-sm text-white/80">or click to browse from your device</p>
+                      </div>
+                      <Button className="mt-4 h-12 rounded-2xl bg-white px-8 text-base font-semibold text-purple-600 hover:bg-white/90">
+                        Browse Files
+                      </Button>
+                    </>
                   )}
                 </motion.div>
               )}
@@ -461,25 +472,12 @@ export default function ConverterScreen({ presetId, defaultConfig }: ConverterSc
                 </motion.div>
               )}
             </AnimatePresence>
-          </Card>
+          </div>
         </motion.div>
 
-        {isFormatLocked ? (
-          <section className="grid gap-3">
-            <p className="text-sm font-medium text-foreground">
-              {defaultConfig?.inputFormat
-                ? `Convert ${defaultConfig.inputFormat.toUpperCase()} to ${lockedOutputLabel}`
-                : `Convert to ${lockedOutputLabel}`}
-            </p>
-            <div className="rounded-2xl border border-primary/30 bg-primary/5 px-4 py-3">
-              <span className="block text-xs uppercase tracking-wide text-muted-foreground">Output format</span>
-              <span className="block text-base font-semibold text-foreground">{lockedOutputLabel}</span>
-            </div>
-          </section>
-        ) : (
-          <section className="grid gap-3">
-            <p className="text-sm font-medium text-foreground">Convert to</p>
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+          <section className="grid gap-4">
+            <p className="text-base font-semibold text-foreground">Convert to</p>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
               {formatCards.map((format) => {
                 const isSupported = !selectedFile || supportedOutputs.includes(format);
                 const isSelected = outputFormat === format;
@@ -490,16 +488,60 @@ export default function ConverterScreen({ presetId, defaultConfig }: ConverterSc
                     type="button"
                     disabled={isLocked}
                     onClick={() => handleFormatSelect(format)}
-                    className={`rounded-2xl border px-4 py-3 text-left text-sm font-medium transition ${
+                    className={`group relative overflow-hidden rounded-2xl px-4 py-4 text-left text-sm font-medium transition ${
                       isSelected
-                        ? "border-primary bg-primary text-primary-foreground"
+                        ? "border-0 bg-gradient-to-br from-purple-500 to-cyan-500 text-white shadow-lg"
                         : isSupported
-                          ? "border-border bg-card text-foreground hover:border-primary/40"
-                          : "border-border bg-muted text-muted-foreground"
-                    } disabled:cursor-not-allowed disabled:opacity-60`}
+                          ? "border border-border bg-white hover:border-purple-300 hover:shadow-md text-foreground"
+                          : "border border-muted bg-gray-50 text-muted-foreground cursor-not-allowed opacity-50"
+                    }`}
                   >
-                    <span className="block text-xs uppercase tracking-wide">Convert to</span>
-                    <span className="block text-base font-semibold">{format.toUpperCase()}</span>
+                    <span className="block text-xs uppercase tracking-wider opacity-75">Convert to</span>
+                    <span className="block text-lg font-bold">{format.toUpperCase()}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+
+        {isFormatLocked && (
+          <section className="grid gap-4">
+            <p className="text-base font-semibold text-foreground">
+              {defaultConfig?.inputFormat
+                ? `Convert ${defaultConfig.inputFormat.toUpperCase()} to ${lockedOutputLabel}`
+                : `Convert to ${lockedOutputLabel}`}
+            </p>
+            <div className="rounded-2xl border border-purple-200 bg-purple-50 px-4 py-3">
+              <span className="block text-xs uppercase tracking-wide text-purple-600">Output format</span>
+              <span className="block text-base font-semibold text-purple-900">{lockedOutputLabel}</span>
+            </div>
+          </section>
+        )}
+
+        {!isFormatLocked && (
+          <section className="grid gap-4">
+            <p className="text-base font-semibold text-foreground">Convert to</p>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+              {formatCards.map((format) => {
+                const isSupported = !selectedFile || supportedOutputs.includes(format);
+                const isSelected = outputFormat === format;
+
+                return (
+                  <button
+                    key={format}
+                    type="button"
+                    disabled={isLocked}
+                    onClick={() => handleFormatSelect(format)}
+                    className={`group relative overflow-hidden rounded-2xl px-4 py-4 text-left text-sm font-medium transition ${
+                      isSelected
+                        ? "border-0 bg-gradient-to-br from-purple-500 to-cyan-500 text-white shadow-lg"
+                        : isSupported
+                          ? "border border-border bg-white hover:border-purple-300 hover:shadow-md text-foreground"
+                          : "border border-muted bg-gray-50 text-muted-foreground cursor-not-allowed opacity-50"
+                    }`}
+                  >
+                    <span className="block text-xs uppercase tracking-wider opacity-75">Convert to</span>
+                    <span className="block text-lg font-bold">{format.toUpperCase()}</span>
                   </button>
                 );
               })}
@@ -509,17 +551,13 @@ export default function ConverterScreen({ presetId, defaultConfig }: ConverterSc
 
         {state !== "completed" && state !== "error" && (
           <Button
-            className="h-12 rounded-2xl text-sm font-semibold"
+            className="h-12 rounded-2xl bg-gradient-to-r from-blue-500 to-cyan-500 text-base font-semibold text-white shadow-lg hover:shadow-xl disabled:opacity-60"
             disabled={!canConvert || isLocked}
             onClick={handleConvert}
           >
             {ctaText}
           </Button>
         )}
-
-        {errorMessage && state !== "error" ? (
-          <p className="text-sm text-destructive">{errorMessage}</p>
-        ) : null}
       </div>
     </main>
   );

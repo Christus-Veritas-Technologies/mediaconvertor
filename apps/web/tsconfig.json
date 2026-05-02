@@ -21,7 +21,9 @@
     ],
     "paths": {
       "@/*": ["./src/*"],
-      "@MediaConvertor/ui/*": ["../../packages/ui/src/*"]
+      "@MediaConvertor/ui/*": ["../../packages/ui/src/*"],
+      "@MediaConvertor/conversion": ["../../packages/conversion/src/index.ts"],
+      "@MediaConvertor/conversion/*": ["../../packages/conversion/src/*"]
     }
   },
   "include": [

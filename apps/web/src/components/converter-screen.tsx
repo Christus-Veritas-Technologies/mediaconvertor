@@ -18,7 +18,7 @@ import { env } from "@MediaConvertor/env/web";
 import { AnimatePresence, motion } from "framer-motion";
 import { Button } from "@MediaConvertor/ui/components/button";
 import { Card } from "@MediaConvertor/ui/components/card";
-import { Cloud, Download } from "lucide-react";
+import { Cloud, Download, Music, Film, Image as ImageIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 const RECENT_KEY = "recent_conversions";
@@ -87,6 +87,32 @@ function smartSelectFormat(fileName: string, options: readonly OutputFormat[]): 
   }
 
   return options[0] ?? null;
+}
+
+function getFormatIcon(format: OutputFormat) {
+  switch (format) {
+    case "mp3":
+      return <Music className="h-5 w-5" />;
+    case "mp4":
+      return <Film className="h-5 w-5" />;
+    case "jpeg":
+    case "jpg":
+    case "png":
+    case "webp":
+      return <ImageIcon className="h-5 w-5" />;
+    default:
+      return null;
+  }
+}
+
+function getBadge(format: OutputFormat) {
+  if (format === "mp3" || format === "webp") {
+    return "Fast";
+  }
+  if (format === "mp4") {
+    return "HD";
+  }
+  return null;
 }
 
 export default function ConverterScreen({ presetId, defaultConfig }: ConverterScreenProps) {
@@ -300,11 +326,6 @@ export default function ConverterScreen({ presetId, defaultConfig }: ConverterSc
   return (
     <main className="mx-auto flex h-full w-full max-w-5xl flex-col justify-start px-4 py-8">
       <div className="mx-auto grid w-full max-w-3xl gap-6">
-        <header className="space-y-1">
-          <h1 className="text-2xl font-semibold text-foreground">Convert your video or audio</h1>
-          <p className="text-sm text-muted-foreground">Upload, convert, and download in one flow.</p>
-        </header>
-
         <motion.div layout transition={{ duration: 0.22 }}>
           <div
             ref={cardRef}
@@ -475,35 +496,6 @@ export default function ConverterScreen({ presetId, defaultConfig }: ConverterSc
           </div>
         </motion.div>
 
-          <section className="grid gap-4">
-            <p className="text-base font-semibold text-foreground">Convert to</p>
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-              {formatCards.map((format) => {
-                const isSupported = !selectedFile || supportedOutputs.includes(format);
-                const isSelected = outputFormat === format;
-
-                return (
-                  <button
-                    key={format}
-                    type="button"
-                    disabled={isLocked}
-                    onClick={() => handleFormatSelect(format)}
-                    className={`group relative overflow-hidden rounded-2xl px-4 py-4 text-left text-sm font-medium transition ${
-                      isSelected
-                        ? "border-0 bg-gradient-to-br from-purple-500 to-cyan-500 text-white shadow-lg"
-                        : isSupported
-                          ? "border border-border bg-white hover:border-purple-300 hover:shadow-md text-foreground"
-                          : "border border-muted bg-gray-50 text-muted-foreground cursor-not-allowed opacity-50"
-                    }`}
-                  >
-                    <span className="block text-xs uppercase tracking-wider opacity-75">Convert to</span>
-                    <span className="block text-lg font-bold">{format.toUpperCase()}</span>
-                  </button>
-                );
-              })}
-            </div>
-          </section>
-
         {isFormatLocked && (
           <section className="grid gap-4">
             <p className="text-base font-semibold text-foreground">
@@ -525,6 +517,8 @@ export default function ConverterScreen({ presetId, defaultConfig }: ConverterSc
               {formatCards.map((format) => {
                 const isSupported = !selectedFile || supportedOutputs.includes(format);
                 const isSelected = outputFormat === format;
+                const badge = getBadge(format);
+                const icon = getFormatIcon(format);
 
                 return (
                   <button
@@ -540,8 +534,28 @@ export default function ConverterScreen({ presetId, defaultConfig }: ConverterSc
                           : "border border-muted bg-gray-50 text-muted-foreground cursor-not-allowed opacity-50"
                     }`}
                   >
-                    <span className="block text-xs uppercase tracking-wider opacity-75">Convert to</span>
-                    <span className="block text-lg font-bold">{format.toUpperCase()}</span>
+                    {badge && (
+                      <span className={`absolute top-2 right-2 text-xs font-semibold px-2 py-1 rounded-full ${
+                        isSelected 
+                          ? "bg-white/30 text-white" 
+                          : "bg-purple-100 text-purple-600"
+                      }`}>
+                        {badge}
+                      </span>
+                    )}
+                    <div className="flex items-center justify-between">
+                      <div className="flex-1">
+                        <span className="block text-xs uppercase tracking-wider opacity-75">Convert to</span>
+                        <span className="block text-lg font-bold">{format.toUpperCase()}</span>
+                      </div>
+                      {icon && (
+                        <div className={`ml-2 flex-shrink-0 ${
+                          isSelected ? "text-white" : "text-purple-600"
+                        }`}>
+                          {icon}
+                        </div>
+                      )}
+                    </div>
                   </button>
                 );
               })}

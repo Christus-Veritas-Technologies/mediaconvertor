@@ -32,6 +32,62 @@ Open [http://localhost:3001](http://localhost:3001) in your browser to see the w
 Use the Expo Go app to run the mobile application.
 The API is running at [http://localhost:3000](http://localhost:3000).
 
+## Backend Requirements (Open Source)
+
+The converter backend uses:
+
+- **FFmpeg** (open source, LGPL/GPL)
+- **FFprobe** (bundled with FFmpeg)
+
+Both binaries must be available on your machine for conversion jobs to run.
+
+### Install FFmpeg on Windows
+
+Option 1 (Winget):
+
+```powershell
+winget install Gyan.FFmpeg
+```
+
+Option 2 (Chocolatey):
+
+```powershell
+choco install ffmpeg
+```
+
+After install, open a new terminal and verify:
+
+```powershell
+ffmpeg -version
+ffprobe -version
+```
+
+### Environment Variables (Server)
+
+Set these in your shell or an `.env` file before running the server:
+
+```bash
+CORS_ORIGIN=http://localhost:3001
+FFMPEG_PATH=ffmpeg
+FFPROBE_PATH=ffprobe
+MAX_CONCURRENT_JOBS=2
+```
+
+If FFmpeg is installed in a custom location, set absolute paths:
+
+```bash
+FFMPEG_PATH=C:\\tools\\ffmpeg\\bin\\ffmpeg.exe
+FFPROBE_PATH=C:\\tools\\ffmpeg\\bin\\ffprobe.exe
+```
+
+### Runtime Health Check
+
+Use this endpoint to confirm backend binary availability:
+
+```text
+GET /health/runtime
+```
+
 ## UI Customization
 
 React web apps in this stack share shadcn/ui primitives through `packages/ui`.

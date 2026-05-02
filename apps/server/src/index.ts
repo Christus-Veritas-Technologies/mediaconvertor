@@ -7,6 +7,7 @@ import { streamSSE } from "hono/streaming";
 import { z } from "zod";
 
 import { normalizeError } from "./conversion/errors";
+import { getRuntimeHealth } from "./conversion/runtime";
 import {
   completeUpload,
   createDownloadStream,
@@ -32,6 +33,13 @@ function errorResponse(message: string, status: number) {
   });
 }
 
+const runtimeHealth = getRuntimeHealth(env.FFMPEG_PATH, env.FFPROBE_PATH);
+if (!runtimeHealth.ffmpeg.available || !runtimeHealth.ffprobe.available) {
+  console.warn(
+    "[MediaConvertor][server] FFmpeg runtime not fully available. Install ffmpeg/ffprobe or set FFMPEG_PATH and FFPROBE_PATH.",
+  );
+}
+
 void initConversionService();
 
 app.use(logger());
@@ -45,6 +53,10 @@ app.use(
 
 app.get("/", (c) => {
   return c.text("OK");
+});
+
+app.get("/health/runtime", (c) => {
+  return c.json(getRuntimeHealth(env.FFMPEG_PATH, env.FFPROBE_PATH));
 });
 
 app.post("/upload/chunk", async (c) => {

@@ -5,8 +5,10 @@ import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 
 import {
+  MAX_FILE_SIZE_BYTES,
   type OutputFormat,
   type QualityLevel,
+  detectMediaKind,
   getFileExtension,
   validateConversionPair,
 } from "@MediaConvertor/conversion";
@@ -76,12 +78,21 @@ export async function saveChunk(params: {
   }
 
   const safeName = sanitizeFilename(fileName);
+  if (!safeName) {
+    throw new AppError("Invalid filename", 400, "invalid_filename");
+  }
+
+  // Enforce supported input types at the backend, independent of frontend checks.
+  detectMediaKind(safeName, mimeType);
+
   const session = createOrGetUploadSession({
     uploadId,
     fileName: safeName,
     mimeType,
     totalChunks,
     receivedChunks: new Set<number>(),
+    chunkSizes: new Map<number, number>(),
+    receivedBytes: 0,
     createdAt: Date.now(),
   });
 
@@ -93,8 +104,14 @@ export async function saveChunk(params: {
   await mkdir(targetDir, { recursive: true });
 
   const bytes = new Uint8Array(await chunk.arrayBuffer());
+  const totalUploadedBytes = updateUploadChunk(uploadId, index, bytes.length);
+  if (totalUploadedBytes > MAX_FILE_SIZE_BYTES) {
+    deleteUploadSession(uploadId);
+    await cleanupUpload(uploadId);
+    throw new AppError("File exceeds maximum allowed size", 413, "file_too_large");
+  }
+
   await Bun.write(chunkPath(uploadId, index), bytes);
-  updateUploadChunk(uploadId, index);
 }
 
 async function mergeChunks(uploadId: string, destinationPath: string) {

@@ -6,6 +6,8 @@ export type UploadSession = {
   mimeType: string;
   totalChunks: number;
   receivedChunks: Set<number>;
+  chunkSizes: Map<number, number>;
+  receivedBytes: number;
   createdAt: number;
 };
 

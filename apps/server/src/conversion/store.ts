@@ -23,9 +23,15 @@ export function getUploadSession(uploadId: string): UploadSession {
   return session;
 }
 
-export function updateUploadChunk(uploadId: string, index: number) {
+export function updateUploadChunk(uploadId: string, index: number, chunkBytes: number) {
   const session = getUploadSession(uploadId);
+
+  const previousSize = session.chunkSizes.get(index) ?? 0;
+  session.chunkSizes.set(index, chunkBytes);
+  session.receivedBytes = session.receivedBytes - previousSize + chunkBytes;
   session.receivedChunks.add(index);
+
+  return session.receivedBytes;
 }
 
 export function deleteUploadSession(uploadId: string) {

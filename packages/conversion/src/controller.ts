@@ -10,7 +10,7 @@ import type {
   ProgressMessage,
   SelectedConversion,
 } from "./types";
-import { validateInputFile, validateSelection } from "./validation";
+import { validateConversionPair, validateInputFile, validateSelection } from "./validation";
 
 export type ControllerProgress = {
   uploadPercent: number;
@@ -149,6 +149,7 @@ export async function startConversion(
 
   const kind = validateInputFile(file);
   validateSelection(kind, selection);
+  validateConversionPair(file.name, selection.outputFormat);
 
   const totalChunks = Math.ceil(file.size / CHUNK_SIZE_BYTES);
   const uploadId = createUploadId();

@@ -1,18 +1,16 @@
 export type ConversionState = "idle" | "uploading" | "processing" | "completed" | "error";
 
-export type MediaKind = "audio" | "video";
+export type MediaKind = "audio" | "video" | "image";
 
 export type QualityLevel = "low" | "medium" | "high";
 
 export type OutputFormat =
   | "mp4"
-  | "webm"
-  | "mov"
   | "mp3"
-  | "wav"
-  | "aac"
-  | "ogg"
-  | "m4a";
+  | "jpeg"
+  | "jpg"
+  | "png"
+  | "webp";
 
 export type ConversionProfile = {
   id: string;

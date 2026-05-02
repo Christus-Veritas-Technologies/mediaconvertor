@@ -19,7 +19,7 @@ const app = new Hono();
 
 const completeUploadSchema = z.object({
   uploadId: z.string().min(1),
-  outputFormat: z.enum(["mp4", "webm", "mov", "mp3", "wav", "aac", "ogg", "m4a"]),
+  outputFormat: z.enum(["mp4", "mp3", "jpeg", "jpg", "png", "webp"]),
   quality: z.enum(["low", "medium", "high"]),
 });
 
@@ -152,7 +152,7 @@ app.get("/download/:jobId", async (c) => {
 
 app.get("/formats/:kind", (c) => {
   const kind = c.req.param("kind");
-  if (kind !== "audio" && kind !== "video") {
+  if (kind !== "audio" && kind !== "video" && kind !== "image") {
     return c.json({ error: "Invalid media kind." }, 400);
   }
 

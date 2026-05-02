@@ -8,6 +8,7 @@ import {
   type OutputFormat,
   type QualityLevel,
   getFileExtension,
+  validateConversionPair,
 } from "@MediaConvertor/conversion";
 
 import { env } from "@MediaConvertor/env/server";
@@ -125,6 +126,8 @@ export async function completeUpload(params: {
     throw new AppError("Missing file extension", 400, "missing_extension");
   }
 
+  validateConversionPair(session.fileName, outputFormat);
+
   const jobId = createJobId();
   const inputPath = inputFilePath(jobId, extension);
   const outputPath = outputFilePath(jobId, outputFormat);
@@ -223,13 +226,11 @@ export async function createDownloadStream(jobId: string) {
 function inferContentType(format: OutputFormat) {
   const map: Record<OutputFormat, string> = {
     mp4: "video/mp4",
-    webm: "video/webm",
-    mov: "video/quicktime",
     mp3: "audio/mpeg",
-    wav: "audio/wav",
-    aac: "audio/aac",
-    ogg: "audio/ogg",
-    m4a: "audio/mp4",
+    jpeg: "image/jpeg",
+    jpg: "image/jpeg",
+    png: "image/png",
+    webp: "image/webp",
   };
 
   return map[format];

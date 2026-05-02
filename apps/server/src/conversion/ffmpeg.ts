@@ -22,20 +22,24 @@ function getVideoQualityArgs(quality: ConversionJob["quality"]): string[] {
 function getAudioQualityArgs(quality: ConversionJob["quality"], outputFormat: ConversionJob["outputFormat"]) {
   const codecByFormat: Record<string, string> = {
     mp3: "libmp3lame",
-    aac: "aac",
-    m4a: "aac",
-    ogg: "libvorbis",
-    wav: "pcm_s16le",
   };
 
   const bitrate = quality === "high" ? "256k" : quality === "low" ? "96k" : "160k";
   const codec = codecByFormat[outputFormat] ?? "aac";
 
-  if (outputFormat === "wav") {
-    return ["-c:a", codec];
+  return ["-c:a", codec, "-b:a", bitrate];
+}
+
+function getImageArgs(outputFormat: ConversionJob["outputFormat"]): string[] {
+  if (outputFormat === "png") {
+    return ["-frames:v", "1", "-compression_level", "3"];
   }
 
-  return ["-c:a", codec, "-b:a", bitrate];
+  if (outputFormat === "webp") {
+    return ["-frames:v", "1", "-q:v", "75"];
+  }
+
+  return ["-frames:v", "1", "-q:v", "2"];
 }
 
 function readDurationSeconds(ffprobePath: string, inputPath: string): number {
@@ -73,7 +77,21 @@ function parseOutTimeMs(line: string): number | null {
 
 function ffmpegArgs(job: ConversionJob): string[] {
   const outputExt = job.outputFormat;
-  const isVideo = ["mp4", "mov", "webm"].includes(outputExt);
+  const isVideo = outputExt === "mp4";
+  const isImage = ["jpeg", "jpg", "png", "webp"].includes(outputExt);
+
+  if (isImage) {
+    return [
+      "-y",
+      "-i",
+      job.inputPath,
+      ...getImageArgs(outputExt),
+      "-progress",
+      "pipe:1",
+      "-nostats",
+      job.outputPath,
+    ];
+  }
 
   if (isVideo) {
     return [

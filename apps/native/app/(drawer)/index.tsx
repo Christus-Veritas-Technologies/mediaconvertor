@@ -1,9 +1,13 @@
 import {
+  appendRecent,
   detectMediaKind,
   getFileExtension,
-  getAllowedOutputs,
+  getFormatCardOptions,
+  getSupportedOutputsForInputExtension,
   startConversion,
+  validateConversionPair,
   type ConversionFile,
+  type ConversionRecentItem,
   type ConversionState,
   type OutputFormat,
 } from "@MediaConvertor/conversion";
@@ -13,62 +17,61 @@ import * as FileSystem from "expo-file-system";
 import * as Sharing from "expo-sharing";
 import { useMemo, useState } from "react";
 import { ActivityIndicator, Pressable, Text, View } from "react-native";
+import Animated, { FadeInDown } from "react-native-reanimated";
 
 import { Container } from "@/components/container";
-import { saveRecentItem as saveRecentToDb } from "@/lib/recent-store";
+import { readRecentItems, saveRecentItem as saveRecentToDb } from "@/lib/recent-store";
 
-const MAX_VISIBLE_FORMATS = 8;
 const DEFAULT_FORMAT_BY_INPUT: Record<string, OutputFormat> = {
   mp4: "mp3",
-  mkv: "mp4",
+  mp3: "mp3",
   wav: "mp3",
+  webp: "png",
+  png: "webp",
+  jpg: "png",
+  jpeg: "png",
 };
+
+function smartSelectFormat(fileName: string, options: readonly OutputFormat[]): OutputFormat | null {
+  if (options.length === 0) {
+    return null;
+  }
+
+  const extension = getFileExtension(fileName);
+  const mapped = DEFAULT_FORMAT_BY_INPUT[extension];
+  if (mapped && options.includes(mapped)) {
+    return mapped;
+  }
+
+  return options[0] ?? null;
+}
+
+function formatFileSize(size: number): string {
+  const mb = size / (1024 * 1024);
+  return `${mb.toFixed(1)} MB`;
+}
 
 export default function Home() {
   const [state, setState] = useState<ConversionState>("idle");
   const [selectedFile, setSelectedFile] = useState<ConversionFile | null>(null);
-  const [mediaKind, setMediaKind] = useState<"audio" | "video" | null>(null);
   const [outputFormat, setOutputFormat] = useState<OutputFormat | null>(null);
   const [uploadPercent, setUploadPercent] = useState(0);
   const [conversionPercent, setConversionPercent] = useState(0);
   const [jobId, setJobId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const allowedFormats = useMemo(() => {
-    if (!mediaKind) {
+  const formatCards = useMemo(() => getFormatCardOptions(), []);
+
+  const supportedOutputs = useMemo(() => {
+    if (!selectedFile) {
       return [] as readonly OutputFormat[];
     }
-    return getAllowedOutputs(mediaKind).slice(0, MAX_VISIBLE_FORMATS);
-  }, [mediaKind]);
+    return getSupportedOutputsForInputExtension(getFileExtension(selectedFile.name));
+  }, [selectedFile]);
 
   const isLocked = state === "uploading" || state === "processing";
 
-  const canConvert =
-    state === "idle" &&
-    !isLocked &&
-    selectedFile !== null &&
-    outputFormat !== null &&
-    allowedFormats.includes(outputFormat);
-
-  function smartSelectFormat(fileName: string, options: readonly OutputFormat[]): OutputFormat | null {
-    if (options.length === 0) {
-      return null;
-    }
-
-    const extension = getFileExtension(fileName);
-    const mapped = DEFAULT_FORMAT_BY_INPUT[extension];
-
-    if (mapped && options.includes(mapped)) {
-      return mapped;
-    }
-
-    return options[0] ?? null;
-  }
-
-  function formatFileSize(size: number): string {
-    const mb = size / (1024 * 1024);
-    return `${mb.toFixed(1)} MB`;
-  }
+  const canConvert = state === "idle" && !!selectedFile && !!outputFormat && !isLocked;
 
   async function handlePickFile() {
     if (isLocked) {
@@ -77,7 +80,7 @@ export default function Home() {
 
     const picked = await DocumentPicker.getDocumentAsync({
       multiple: false,
-      type: ["audio/*", "video/*"],
+      type: ["audio/mpeg", "video/mp4", "image/jpeg", "image/png", "image/webp"],
       copyToCacheDirectory: true,
     });
 
@@ -98,19 +101,36 @@ export default function Home() {
         blob,
       };
 
-      const kind = detectMediaKind(file.name, file.mimeType);
-      const nextFormats = getAllowedOutputs(kind);
+      detectMediaKind(file.name, file.mimeType);
+      const nextSupported = getSupportedOutputsForInputExtension(getFileExtension(file.name));
 
       setSelectedFile(file);
-      setMediaKind(kind);
-      setOutputFormat(smartSelectFormat(file.name, nextFormats.slice(0, MAX_VISIBLE_FORMATS)));
+      setOutputFormat(smartSelectFormat(file.name, nextSupported));
       setState("idle");
       setUploadPercent(0);
       setConversionPercent(0);
       setJobId(null);
       setErrorMessage(null);
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Failed to read file.");
+      setSelectedFile(null);
+      setOutputFormat(null);
+      setErrorMessage(error instanceof Error ? error.message : "Unsupported file.");
+    }
+  }
+
+  function handleFormatSelect(nextFormat: OutputFormat) {
+    setOutputFormat(nextFormat);
+
+    if (!selectedFile) {
+      setErrorMessage(null);
+      return;
+    }
+
+    try {
+      validateConversionPair(selectedFile.name, nextFormat);
+      setErrorMessage(null);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Invalid conversion pair.");
     }
   }
 
@@ -118,6 +138,15 @@ export default function Home() {
     if (!selectedFile || !outputFormat || isLocked) {
       return;
     }
+
+    try {
+      validateConversionPair(selectedFile.name, outputFormat);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Invalid conversion pair.");
+      return;
+    }
+
+    setErrorMessage(null);
 
     try {
       const result = await startConversion(
@@ -145,7 +174,8 @@ export default function Home() {
 
       if (result.state === "completed" && result.success) {
         setJobId(result.success.jobId);
-        saveRecentToDb({
+
+        const item: ConversionRecentItem = {
           id: result.success.jobId,
           inputName: selectedFile.name,
           outputName: `converted-${result.success.jobId}.${outputFormat}`,
@@ -153,7 +183,12 @@ export default function Home() {
           quality: "medium",
           sizeBytes: result.success.sizeBytes,
           createdAt: new Date().toISOString(),
-        });
+        };
+
+        const nextRecent = appendRecent(readRecentItems(10), item);
+        for (const recent of nextRecent) {
+          saveRecentToDb(recent);
+        }
       }
 
       if (result.state === "error") {
@@ -201,7 +236,7 @@ export default function Home() {
           <Text className="text-sm text-muted">Upload, convert, and download in one flow.</Text>
         </View>
 
-        <View className="mb-4 rounded-2xl border border-border bg-card p-4">
+        <Animated.View entering={FadeInDown.duration(220)} className="mb-4 rounded-2xl border border-border bg-card p-4">
           {state === "idle" && (
             <Pressable className="min-h-40 items-center justify-center rounded-2xl bg-secondary px-4" onPress={handlePickFile}>
               {selectedFile ? (
@@ -212,7 +247,7 @@ export default function Home() {
               ) : (
                 <View className="items-center gap-1">
                   <Text className="text-base font-medium text-foreground">Tap to upload file</Text>
-                  <Text className="text-sm text-muted">Choose video or audio file</Text>
+                  <Text className="text-sm text-muted">Accepted: mp3, mp4, jpeg, webp, jpg, png</Text>
                 </View>
               )}
             </Pressable>
@@ -231,10 +266,7 @@ export default function Home() {
               <ActivityIndicator />
               <Text className="text-base text-foreground">Converting...</Text>
               <View className="h-2 w-full overflow-hidden rounded-full bg-muted">
-                <View
-                  className="h-2 rounded-full bg-primary"
-                  style={{ width: `${conversionPercent}%` }}
-                />
+                <View className="h-2 rounded-full bg-primary" style={{ width: `${conversionPercent}%` }} />
               </View>
               <Text className="text-sm text-muted">{conversionPercent}%</Text>
             </View>
@@ -261,40 +293,62 @@ export default function Home() {
               </Pressable>
             </View>
           )}
-        </View>
+        </Animated.View>
 
-        <View className="mb-4">
+        <Animated.View entering={FadeInDown.delay(60).duration(220)} className="mb-4">
           <Text className="mb-2 text-sm font-medium text-foreground">Convert to</Text>
           <View className="flex-row flex-wrap gap-2">
-            {allowedFormats.length === 0 ? (
-              <Text className="text-sm text-muted">Select a file to view formats</Text>
-            ) : (
-              allowedFormats.map((format) => (
+            {formatCards.map((format) => {
+              const isSupported = !selectedFile || supportedOutputs.includes(format);
+              const isSelected = outputFormat === format;
+
+              return (
                 <Pressable
                   key={format}
-                  className={`rounded-xl px-3 py-2 ${outputFormat === format ? "bg-primary" : "bg-secondary"}`}
-                  onPress={() => setOutputFormat(format)}
-                  disabled={!selectedFile || isLocked}
+                  className={`rounded-2xl border px-3 py-2 ${
+                    isSelected
+                      ? "border-primary bg-primary"
+                      : isSupported
+                        ? "border-border bg-card"
+                        : "border-border bg-muted"
+                  }`}
+                  disabled={isLocked}
+                  onPress={() => handleFormatSelect(format)}
                 >
                   <Text
-                    className={`text-sm font-medium ${outputFormat === format ? "text-primary-foreground" : "text-foreground"}`}
+                    className={`text-xs uppercase ${
+                      isSelected ? "text-primary-foreground" : isSupported ? "text-muted" : "text-muted"
+                    }`}
+                  >
+                    Convert to
+                  </Text>
+                  <Text
+                    className={`text-sm font-semibold ${
+                      isSelected
+                        ? "text-primary-foreground"
+                        : isSupported
+                          ? "text-foreground"
+                          : "text-muted"
+                    }`}
                   >
                     {format.toUpperCase()}
                   </Text>
                 </Pressable>
-              ))
-            )}
+              );
+            })}
           </View>
-        </View>
+        </Animated.View>
 
         {state !== "completed" && state !== "error" && (
-          <Pressable
-            className={`items-center rounded-2xl py-4 ${canConvert ? "bg-primary" : "bg-muted"}`}
-            disabled={!canConvert}
-            onPress={handleConvert}
-          >
-            <Text className="text-sm font-semibold text-primary-foreground">{ctaText}</Text>
-          </Pressable>
+          <Animated.View entering={FadeInDown.delay(120).duration(220)}>
+            <Pressable
+              className={`items-center rounded-2xl py-4 ${canConvert ? "bg-primary" : "bg-muted"}`}
+              disabled={!canConvert}
+              onPress={handleConvert}
+            >
+              <Text className="text-sm font-semibold text-primary-foreground">{ctaText}</Text>
+            </Pressable>
+          </Animated.View>
         )}
 
         {errorMessage && state !== "error" ? (

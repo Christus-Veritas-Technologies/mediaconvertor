@@ -3,29 +3,35 @@
 import {
   appendRecent,
   detectMediaKind,
-  getAllowedOutputs,
   getFileExtension,
+  getFormatCardOptions,
   getPresetById,
+  getSupportedOutputsForInputExtension,
   startConversion,
+  validateConversionPair,
   type ConversionFile,
   type ConversionRecentItem,
   type ConversionState,
   type OutputFormat,
-  type QualityLevel,
 } from "@MediaConvertor/conversion";
 import { env } from "@MediaConvertor/env/web";
+import { AnimatePresence, motion } from "framer-motion";
 import { UploadCloud } from "lucide-react";
 import { Button } from "@MediaConvertor/ui/components/button";
 import { Card } from "@MediaConvertor/ui/components/card";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 const RECENT_KEY = "mc_recent_items";
-const MAX_VISIBLE_FORMATS = 8;
+const ACCEPTED_FILE_TYPES = ".mp3,.mp4,.jpeg,.jpg,.png,.webp";
 
 const DEFAULT_FORMAT_BY_INPUT: Record<string, OutputFormat> = {
   mp4: "mp3",
-  mkv: "mp4",
+  mp3: "mp3",
   wav: "mp3",
+  webp: "png",
+  png: "webp",
+  jpg: "png",
+  jpeg: "png",
 };
 
 type ConverterScreenProps = {
@@ -56,17 +62,36 @@ function writeRecentToStorage(items: ConversionRecentItem[]) {
   window.localStorage.setItem(RECENT_KEY, JSON.stringify(items));
 }
 
+function formatFileSize(size: number): string {
+  const mb = size / (1024 * 1024);
+  return `${mb.toFixed(1)} MB`;
+}
+
+function smartSelectFormat(fileName: string, options: readonly OutputFormat[]): OutputFormat | null {
+  if (options.length === 0) {
+    return null;
+  }
+
+  const extension = getFileExtension(fileName);
+  const mapped = DEFAULT_FORMAT_BY_INPUT[extension];
+
+  if (mapped && options.includes(mapped)) {
+    return mapped;
+  }
+
+  return options[0] ?? null;
+}
+
 export default function ConverterScreen({ presetId }: ConverterScreenProps) {
   const [state, setState] = useState<ConversionState>("idle");
   const [selectedFile, setSelectedFile] = useState<ConversionFile | null>(null);
-  const [mediaKind, setMediaKind] = useState<"audio" | "video" | null>(null);
   const [outputFormat, setOutputFormat] = useState<OutputFormat | null>(null);
-  const [quality, setQuality] = useState<QualityLevel>("medium");
   const [uploadPercent, setUploadPercent] = useState(0);
   const [conversionPercent, setConversionPercent] = useState(0);
   const [jobId, setJobId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+
   const cardRef = useRef<HTMLDivElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -77,21 +102,17 @@ export default function ConverterScreen({ presetId }: ConverterScreenProps) {
     return getPresetById(presetId) ?? null;
   }, [presetId]);
 
-  useEffect(() => {
-    if (!activePreset) {
-      return;
-    }
+  const formatCards = useMemo(() => getFormatCardOptions(), []);
 
-    setOutputFormat(activePreset.outputFormat);
-    setQuality(activePreset.quality);
-  }, [activePreset]);
-
-  const allowedFormats = useMemo<readonly OutputFormat[]>(() => {
-    if (!mediaKind) {
-      return [];
+  const supportedOutputs = useMemo(() => {
+    if (!selectedFile) {
+      return [] as readonly OutputFormat[];
     }
-    return getAllowedOutputs(mediaKind).slice(0, MAX_VISIBLE_FORMATS);
-  }, [mediaKind]);
+    const extension = getFileExtension(selectedFile.name);
+    return getSupportedOutputsForInputExtension(extension);
+  }, [selectedFile]);
+
+  const isLocked = state === "uploading" || state === "processing";
 
   useEffect(() => {
     if (state === "processing") {
@@ -102,35 +123,16 @@ export default function ConverterScreen({ presetId }: ConverterScreenProps) {
     }
   }, [state]);
 
-  const canConvert =
-    state === "idle" &&
-    selectedFile !== null &&
-    outputFormat !== null &&
-    allowedFormats.includes(outputFormat);
-
-  const isLocked = state === "uploading" || state === "processing";
-
-  function smartSelectFormat(fileName: string, options: readonly OutputFormat[]): OutputFormat | null {
-    if (options.length === 0) {
-      return null;
-    }
-
-    const extension = getFileExtension(fileName);
-    const mapped = DEFAULT_FORMAT_BY_INPUT[extension];
-
-    if (mapped && options.includes(mapped)) {
-      return mapped;
-    }
-
-    return options[0] ?? null;
-  }
-
-  async function applySelectedFile(file: File) {
-    if (isLocked) {
+  useEffect(() => {
+    if (!activePreset) {
       return;
     }
 
-    if (!file) {
+    setOutputFormat(activePreset.outputFormat);
+  }, [activePreset]);
+
+  async function applySelectedFile(file: File) {
+    if (isLocked) {
       return;
     }
 
@@ -142,23 +144,20 @@ export default function ConverterScreen({ presetId }: ConverterScreenProps) {
         blob: file,
       };
 
-      const detectedKind = detectMediaKind(nextFile.name, nextFile.mimeType);
-      const nextFormats = getAllowedOutputs(detectedKind);
+      detectMediaKind(nextFile.name, nextFile.mimeType);
+      const nextSupported = getSupportedOutputsForInputExtension(getFileExtension(nextFile.name));
 
       setSelectedFile(nextFile);
-      setMediaKind(detectedKind);
       setOutputFormat((current) => {
-        const visibleFormats = nextFormats.slice(0, MAX_VISIBLE_FORMATS);
-
-        if (current && visibleFormats.includes(current)) {
+        if (current && nextSupported.includes(current)) {
           return current;
         }
 
-        if (activePreset && visibleFormats.includes(activePreset.outputFormat)) {
+        if (activePreset && nextSupported.includes(activePreset.outputFormat)) {
           return activePreset.outputFormat;
         }
 
-        return smartSelectFormat(nextFile.name, visibleFormats);
+        return smartSelectFormat(nextFile.name, nextSupported);
       });
       setErrorMessage(null);
       setState("idle");
@@ -167,7 +166,6 @@ export default function ConverterScreen({ presetId }: ConverterScreenProps) {
       setJobId(null);
     } catch (error) {
       setSelectedFile(null);
-      setMediaKind(null);
       setOutputFormat(null);
       setErrorMessage(error instanceof Error ? error.message : "Unsupported file.");
     }
@@ -178,7 +176,6 @@ export default function ConverterScreen({ presetId }: ConverterScreenProps) {
     if (!file) {
       return;
     }
-
     await applySelectedFile(file);
   }
 
@@ -189,8 +186,31 @@ export default function ConverterScreen({ presetId }: ConverterScreenProps) {
     fileInputRef.current?.click();
   }
 
+  function handleFormatSelect(nextFormat: OutputFormat) {
+    setOutputFormat(nextFormat);
+
+    if (!selectedFile) {
+      setErrorMessage(null);
+      return;
+    }
+
+    try {
+      validateConversionPair(selectedFile.name, nextFormat);
+      setErrorMessage(null);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Invalid conversion pair.");
+    }
+  }
+
   async function handleConvert() {
     if (!selectedFile || !outputFormat || isLocked) {
+      return;
+    }
+
+    try {
+      validateConversionPair(selectedFile.name, outputFormat);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Invalid conversion pair.");
       return;
     }
 
@@ -202,7 +222,7 @@ export default function ConverterScreen({ presetId }: ConverterScreenProps) {
           file: selectedFile,
           selection: {
             outputFormat,
-            quality,
+            quality: "medium",
           },
         },
         {
@@ -228,7 +248,7 @@ export default function ConverterScreen({ presetId }: ConverterScreenProps) {
           inputName: selectedFile.name,
           outputName: `converted-${result.success.jobId}.${outputFormat}`,
           outputFormat,
-          quality,
+          quality: "medium",
           sizeBytes: result.success.sizeBytes,
           createdAt: new Date().toISOString(),
         };
@@ -253,10 +273,7 @@ export default function ConverterScreen({ presetId }: ConverterScreenProps) {
     setConversionPercent(0);
   }
 
-  function formatFileSize(size: number): string {
-    const mb = size / (1024 * 1024);
-    return `${mb.toFixed(1)} MB`;
-  }
+  const canConvert = state === "idle" && !!selectedFile && !!outputFormat && !isLocked;
 
   const ctaText =
     state === "uploading"
@@ -273,149 +290,192 @@ export default function ConverterScreen({ presetId }: ConverterScreenProps) {
           <p className="text-sm text-muted-foreground">Upload, convert, and download in one flow.</p>
         </header>
 
-        <Card
-          ref={cardRef}
-          role="button"
-          tabIndex={isLocked ? -1 : 0}
-          onClick={state === "idle" ? openFileDialog : undefined}
-          onKeyDown={(event) => {
-            if (state !== "idle") {
-              return;
-            }
-
-            if (event.key === "Enter" || event.key === " ") {
-              event.preventDefault();
-              openFileDialog();
-            }
-          }}
-          onDragOver={(event) => {
-            if (isLocked) {
-              return;
-            }
-
-            event.preventDefault();
-            setIsDragging(true);
-          }}
-          onDragLeave={() => setIsDragging(false)}
-          onDrop={(event) => {
-            if (isLocked) {
-              return;
-            }
-
-            event.preventDefault();
-            setIsDragging(false);
-            const file = event.dataTransfer.files?.[0];
-            if (file) {
-              void applySelectedFile(file);
-            }
-          }}
-          className={`rounded-2xl border p-6 transition ${
-            isDragging ? "border-primary bg-secondary" : "border-border bg-card"
-          } ${state === "idle" ? "cursor-pointer" : "cursor-default"}`}
-        >
-          <input
-            ref={fileInputRef}
-            type="file"
-            className="hidden"
-            aria-label="Upload media file"
-            onChange={(event) => {
-              void handleFileSelection(event);
+        <motion.div layout transition={{ duration: 0.22 }}>
+          <Card
+            ref={cardRef}
+            role="button"
+            tabIndex={isLocked ? -1 : 0}
+            onClick={state === "idle" ? openFileDialog : undefined}
+            onKeyDown={(event) => {
+              if (state !== "idle") {
+                return;
+              }
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                openFileDialog();
+              }
             }}
-          />
+            onDragOver={(event) => {
+              if (isLocked) {
+                return;
+              }
+              event.preventDefault();
+              setIsDragging(true);
+            }}
+            onDragLeave={() => setIsDragging(false)}
+            onDrop={(event) => {
+              if (isLocked) {
+                return;
+              }
+              event.preventDefault();
+              setIsDragging(false);
+              const file = event.dataTransfer.files?.[0];
+              if (file) {
+                void applySelectedFile(file);
+              }
+            }}
+            className={`rounded-2xl border p-6 transition ${
+              isDragging ? "border-primary bg-secondary" : "border-border bg-card"
+            } ${state === "idle" ? "cursor-pointer" : "cursor-default"}`}
+          >
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept={ACCEPTED_FILE_TYPES}
+              className="hidden"
+              aria-label="Upload media file"
+              onChange={(event) => {
+                void handleFileSelection(event);
+              }}
+            />
 
-          {state === "idle" && (
-            <div className="grid min-h-48 place-items-center gap-4 text-center">
-              <UploadCloud className="h-10 w-10 text-primary" />
-              {selectedFile ? (
-                <div className="space-y-1">
-                  <p className="text-base font-medium text-foreground">{selectedFile.name}</p>
-                  <p className="text-sm text-muted-foreground">{formatFileSize(selectedFile.size)}</p>
-                </div>
-              ) : (
-                <div className="space-y-1">
-                  <p className="text-base font-medium text-foreground">Tap to upload file</p>
-                  <p className="text-sm text-muted-foreground">or drag and drop</p>
-                </div>
-              )}
-            </div>
-          )}
-
-          {state === "uploading" && (
-            <div className="grid min-h-48 place-items-center gap-4 text-center">
-              <div className="h-10 w-10 animate-spin rounded-full border-4 border-muted border-t-primary" />
-              <div className="space-y-1">
-                <p className="text-base font-medium text-foreground">Uploading...</p>
-                <p className="text-sm text-muted-foreground">Uploading chunks {uploadPercent}%</p>
-              </div>
-            </div>
-          )}
-
-          {state === "processing" && (
-            <div className="grid min-h-48 gap-5 py-6">
-              <p className="text-center text-base font-medium text-foreground">Converting...</p>
-              <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
-                <div
-                  className="h-full rounded-full bg-primary transition-all duration-300"
-                  style={{ width: `${conversionPercent}%` }}
-                />
-              </div>
-              <p className="text-center text-sm text-muted-foreground">{conversionPercent}%</p>
-            </div>
-          )}
-
-          {state === "completed" && (
-            <div className="grid min-h-48 place-items-center gap-4 text-center">
-              <div className="space-y-1">
-                <p className="text-lg font-semibold text-foreground">Conversion Complete</p>
-                <p className="text-sm text-muted-foreground">
-                  {selectedFile ? `${selectedFile.name.split(".")[0]}.${outputFormat}` : "Converted file ready"}
-                </p>
-              </div>
-              {jobId && (
-                <a
-                  href={`${env.NEXT_PUBLIC_SERVER_URL}/download/${jobId}`}
-                  className="inline-flex h-11 items-center justify-center rounded-2xl bg-primary px-6 text-sm font-semibold text-primary-foreground"
+            <AnimatePresence mode="wait">
+              {state === "idle" && (
+                <motion.div
+                  key="idle"
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -8 }}
+                  transition={{ duration: 0.2 }}
+                  className="grid min-h-48 place-items-center gap-4 text-center"
                 >
-                  Download
-                </a>
+                  <UploadCloud className="h-10 w-10 text-primary" />
+                  {selectedFile ? (
+                    <div className="space-y-1">
+                      <p className="text-base font-medium text-foreground">{selectedFile.name}</p>
+                      <p className="text-sm text-muted-foreground">{formatFileSize(selectedFile.size)}</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-1">
+                      <p className="text-base font-medium text-foreground">Tap to upload file</p>
+                      <p className="text-sm text-muted-foreground">or drag and drop</p>
+                    </div>
+                  )}
+                </motion.div>
               )}
-            </div>
-          )}
 
-          {state === "error" && (
-            <div className="grid min-h-48 place-items-center gap-4 text-center">
-              <div className="space-y-1">
-                <p className="text-lg font-semibold text-destructive">Something went wrong</p>
-                <p className="text-sm text-muted-foreground">{errorMessage ?? "Please try again."}</p>
-              </div>
-              <Button variant="outline" className="h-11 rounded-2xl px-6" onClick={handleRetry}>
-                Try Again
-              </Button>
-            </div>
-          )}
-        </Card>
+              {state === "uploading" && (
+                <motion.div
+                  key="uploading"
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -8 }}
+                  transition={{ duration: 0.2 }}
+                  className="grid min-h-48 place-items-center gap-4 text-center"
+                >
+                  <div className="h-10 w-10 animate-spin rounded-full border-4 border-muted border-t-primary" />
+                  <div className="space-y-1">
+                    <p className="text-base font-medium text-foreground">Uploading...</p>
+                    <p className="text-sm text-muted-foreground">Uploading chunks {uploadPercent}%</p>
+                  </div>
+                </motion.div>
+              )}
+
+              {state === "processing" && (
+                <motion.div
+                  key="processing"
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -8 }}
+                  transition={{ duration: 0.2 }}
+                  className="grid min-h-48 gap-5 py-6"
+                >
+                  <p className="text-center text-base font-medium text-foreground">Converting...</p>
+                  <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+                    <motion.div
+                      className="h-full rounded-full bg-primary"
+                      animate={{ width: `${conversionPercent}%` }}
+                      transition={{ duration: 0.2 }}
+                    />
+                  </div>
+                  <p className="text-center text-sm text-muted-foreground">{conversionPercent}%</p>
+                </motion.div>
+              )}
+
+              {state === "completed" && (
+                <motion.div
+                  key="completed"
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -8 }}
+                  transition={{ duration: 0.2 }}
+                  className="grid min-h-48 place-items-center gap-4 text-center"
+                >
+                  <div className="space-y-1">
+                    <p className="text-lg font-semibold text-foreground">Conversion Complete</p>
+                    <p className="text-sm text-muted-foreground">
+                      {selectedFile ? `${selectedFile.name.split(".")[0]}.${outputFormat}` : "Converted file ready"}
+                    </p>
+                  </div>
+                  {jobId && (
+                    <a
+                      href={`${env.NEXT_PUBLIC_SERVER_URL}/download/${jobId}`}
+                      className="inline-flex h-11 items-center justify-center rounded-2xl bg-primary px-6 text-sm font-semibold text-primary-foreground"
+                    >
+                      Download
+                    </a>
+                  )}
+                </motion.div>
+              )}
+
+              {state === "error" && (
+                <motion.div
+                  key="error"
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -8 }}
+                  transition={{ duration: 0.2 }}
+                  className="grid min-h-48 place-items-center gap-4 text-center"
+                >
+                  <div className="space-y-1">
+                    <p className="text-lg font-semibold text-destructive">Something went wrong</p>
+                    <p className="text-sm text-muted-foreground">{errorMessage ?? "Please try again."}</p>
+                  </div>
+                  <Button variant="outline" className="h-11 rounded-2xl px-6" onClick={handleRetry}>
+                    Try Again
+                  </Button>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </Card>
+        </motion.div>
 
         <section className="grid gap-3">
           <p className="text-sm font-medium text-foreground">Convert to</p>
-          <div className="flex flex-wrap gap-2">
-            {allowedFormats.length === 0 && (
-              <span className="text-sm text-muted-foreground">Select a file to view formats</span>
-            )}
-            {allowedFormats.map((format) => (
-              <button
-                key={format}
-                type="button"
-                disabled={!selectedFile || isLocked}
-                onClick={() => setOutputFormat(format)}
-                className={`rounded-xl px-4 py-2 text-sm font-medium transition ${
-                  outputFormat === format
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-secondary text-foreground hover:bg-muted"
-                } disabled:cursor-not-allowed disabled:opacity-50`}
-              >
-                {format.toUpperCase()}
-              </button>
-            ))}
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+            {formatCards.map((format) => {
+              const isSupported = !selectedFile || supportedOutputs.includes(format);
+              const isSelected = outputFormat === format;
+
+              return (
+                <button
+                  key={format}
+                  type="button"
+                  disabled={isLocked}
+                  onClick={() => handleFormatSelect(format)}
+                  className={`rounded-2xl border px-4 py-3 text-left text-sm font-medium transition ${
+                    isSelected
+                      ? "border-primary bg-primary text-primary-foreground"
+                      : isSupported
+                        ? "border-border bg-card text-foreground hover:border-primary/40"
+                        : "border-border bg-muted text-muted-foreground"
+                  } disabled:cursor-not-allowed disabled:opacity-60`}
+                >
+                  <span className="block text-xs uppercase tracking-wide">Convert to</span>
+                  <span className="block text-base font-semibold">{format.toUpperCase()}</span>
+                </button>
+              );
+            })}
           </div>
         </section>
 

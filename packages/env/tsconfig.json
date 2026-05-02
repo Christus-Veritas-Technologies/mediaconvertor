@@ -1,0 +1,3 @@
+{
+  "extends": "@MediaConvertor/config/tsconfig.base.json"
+}

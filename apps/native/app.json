@@ -1,0 +1,17 @@
+{
+  "expo": {
+    "scheme": "MediaConvertor",
+    "userInterfaceStyle": "automatic",
+    "orientation": "default",
+    "web": {
+      "bundler": "metro"
+    },
+    "name": "MediaConvertor",
+    "slug": "MediaConvertor",
+    "plugins": ["expo-font"],
+    "experiments": {
+      "typedRoutes": true,
+      "reactCompiler": true
+    }
+  }
+}

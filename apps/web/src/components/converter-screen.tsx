@@ -1,10 +1,10 @@
 "use client";
 
 import {
-  PROFILE_PRESETS,
   appendRecent,
   detectMediaKind,
   getAllowedOutputs,
+  getFileExtension,
   getPresetById,
   startConversion,
   type ConversionFile,
@@ -14,13 +14,19 @@ import {
   type QualityLevel,
 } from "@MediaConvertor/conversion";
 import { env } from "@MediaConvertor/env/web";
+import { UploadCloud } from "lucide-react";
 import { Button } from "@MediaConvertor/ui/components/button";
 import { Card } from "@MediaConvertor/ui/components/card";
-import { Input } from "@MediaConvertor/ui/components/input";
-import { Label } from "@MediaConvertor/ui/components/label";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 const RECENT_KEY = "mc_recent_items";
+const MAX_VISIBLE_FORMATS = 8;
+
+const DEFAULT_FORMAT_BY_INPUT: Record<string, OutputFormat> = {
+  mp4: "mp3",
+  mkv: "mp4",
+  wav: "mp3",
+};
 
 type ConverterScreenProps = {
   presetId?: string;
@@ -60,7 +66,9 @@ export default function ConverterScreen({ presetId }: ConverterScreenProps) {
   const [conversionPercent, setConversionPercent] = useState(0);
   const [jobId, setJobId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [recentItems, setRecentItems] = useState<ConversionRecentItem[]>([]);
+  const [isDragging, setIsDragging] = useState(false);
+  const cardRef = useRef<HTMLDivElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const activePreset = useMemo(() => {
     if (!presetId) {
@@ -68,10 +76,6 @@ export default function ConverterScreen({ presetId }: ConverterScreenProps) {
     }
     return getPresetById(presetId) ?? null;
   }, [presetId]);
-
-  useEffect(() => {
-    setRecentItems(readRecentFromStorage());
-  }, []);
 
   useEffect(() => {
     if (!activePreset) {
@@ -82,12 +86,21 @@ export default function ConverterScreen({ presetId }: ConverterScreenProps) {
     setQuality(activePreset.quality);
   }, [activePreset]);
 
-  const allowedFormats = useMemo(() => {
+  const allowedFormats = useMemo<readonly OutputFormat[]>(() => {
     if (!mediaKind) {
-      return [] as readonly OutputFormat[];
+      return [];
     }
-    return getAllowedOutputs(mediaKind);
+    return getAllowedOutputs(mediaKind).slice(0, MAX_VISIBLE_FORMATS);
   }, [mediaKind]);
+
+  useEffect(() => {
+    if (state === "processing") {
+      cardRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+      });
+    }
+  }, [state]);
 
   const canConvert =
     state === "idle" &&
@@ -95,8 +108,27 @@ export default function ConverterScreen({ presetId }: ConverterScreenProps) {
     outputFormat !== null &&
     allowedFormats.includes(outputFormat);
 
-  async function handleFileSelection(event: React.ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
+  const isLocked = state === "uploading" || state === "processing";
+
+  function smartSelectFormat(fileName: string, options: readonly OutputFormat[]): OutputFormat | null {
+    if (options.length === 0) {
+      return null;
+    }
+
+    const extension = getFileExtension(fileName);
+    const mapped = DEFAULT_FORMAT_BY_INPUT[extension];
+
+    if (mapped && options.includes(mapped)) {
+      return mapped;
+    }
+
+    return options[0] ?? null;
+  }
+
+  async function applySelectedFile(file: File) {
+    if (isLocked) {
+      return;
+    }
 
     if (!file) {
       return;
@@ -116,17 +148,23 @@ export default function ConverterScreen({ presetId }: ConverterScreenProps) {
       setSelectedFile(nextFile);
       setMediaKind(detectedKind);
       setOutputFormat((current) => {
-        if (current && nextFormats.includes(current)) {
+        const visibleFormats = nextFormats.slice(0, MAX_VISIBLE_FORMATS);
+
+        if (current && visibleFormats.includes(current)) {
           return current;
         }
 
-        if (activePreset && nextFormats.includes(activePreset.outputFormat)) {
+        if (activePreset && visibleFormats.includes(activePreset.outputFormat)) {
           return activePreset.outputFormat;
         }
 
-        return nextFormats[0] ?? null;
+        return smartSelectFormat(nextFile.name, visibleFormats);
       });
       setErrorMessage(null);
+      setState("idle");
+      setUploadPercent(0);
+      setConversionPercent(0);
+      setJobId(null);
     } catch (error) {
       setSelectedFile(null);
       setMediaKind(null);
@@ -135,8 +173,24 @@ export default function ConverterScreen({ presetId }: ConverterScreenProps) {
     }
   }
 
+  async function handleFileSelection(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) {
+      return;
+    }
+
+    await applySelectedFile(file);
+  }
+
+  function openFileDialog() {
+    if (isLocked) {
+      return;
+    }
+    fileInputRef.current?.click();
+  }
+
   async function handleConvert() {
-    if (!selectedFile || !outputFormat) {
+    if (!selectedFile || !outputFormat || isLocked) {
       return;
     }
 
@@ -179,11 +233,8 @@ export default function ConverterScreen({ presetId }: ConverterScreenProps) {
           createdAt: new Date().toISOString(),
         };
 
-        setRecentItems((current) => {
-          const next = appendRecent(current, item);
-          writeRecentToStorage(next);
-          return next;
-        });
+        const next = appendRecent(readRecentFromStorage(), item);
+        writeRecentToStorage(next);
       }
 
       if (result.state === "error") {
@@ -202,153 +253,186 @@ export default function ConverterScreen({ presetId }: ConverterScreenProps) {
     setConversionPercent(0);
   }
 
+  function formatFileSize(size: number): string {
+    const mb = size / (1024 * 1024);
+    return `${mb.toFixed(1)} MB`;
+  }
+
+  const ctaText =
+    state === "uploading"
+      ? "Uploading..."
+      : state === "processing"
+        ? "Converting..."
+        : "Convert Now";
+
   return (
-    <div className="mx-auto flex w-full max-w-3xl flex-col gap-4 px-4 py-4">
-      <header className="space-y-1">
-        <h1 className="text-xl font-semibold">MediaConvertor</h1>
-        <p className="text-sm text-muted-foreground">Single-screen conversion workflow</p>
-      </header>
+    <main className="mx-auto flex h-full w-full max-w-5xl flex-col justify-start px-4 py-8">
+      <div className="mx-auto grid w-full max-w-3xl gap-6">
+        <header className="space-y-1">
+          <h1 className="text-2xl font-semibold text-foreground">Convert your video or audio</h1>
+          <p className="text-sm text-muted-foreground">Upload, convert, and download in one flow.</p>
+        </header>
 
-      <Card className="rounded-2xl bg-card p-4">
-        <div className="space-y-4">
+        <Card
+          ref={cardRef}
+          role="button"
+          tabIndex={isLocked ? -1 : 0}
+          onClick={state === "idle" ? openFileDialog : undefined}
+          onKeyDown={(event) => {
+            if (state !== "idle") {
+              return;
+            }
+
+            if (event.key === "Enter" || event.key === " ") {
+              event.preventDefault();
+              openFileDialog();
+            }
+          }}
+          onDragOver={(event) => {
+            if (isLocked) {
+              return;
+            }
+
+            event.preventDefault();
+            setIsDragging(true);
+          }}
+          onDragLeave={() => setIsDragging(false)}
+          onDrop={(event) => {
+            if (isLocked) {
+              return;
+            }
+
+            event.preventDefault();
+            setIsDragging(false);
+            const file = event.dataTransfer.files?.[0];
+            if (file) {
+              void applySelectedFile(file);
+            }
+          }}
+          className={`rounded-2xl border p-6 transition ${
+            isDragging ? "border-primary bg-secondary" : "border-border bg-card"
+          } ${state === "idle" ? "cursor-pointer" : "cursor-default"}`}
+        >
+          <input
+            ref={fileInputRef}
+            type="file"
+            className="hidden"
+            aria-label="Upload media file"
+            onChange={(event) => {
+              void handleFileSelection(event);
+            }}
+          />
+
           {state === "idle" && (
-            <>
-              <div className="space-y-2">
-                <Label htmlFor="file-input">Select File</Label>
-                <Input id="file-input" type="file" onChange={handleFileSelection} />
-              </div>
-
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="format-select">Output Format</Label>
-                  <select
-                    id="format-select"
-                    className="h-10 w-full rounded-xl border border-border bg-background px-3 text-sm"
-                    value={outputFormat ?? ""}
-                    disabled={!selectedFile}
-                    onChange={(event) => setOutputFormat(event.target.value as OutputFormat)}
-                  >
-                    {allowedFormats.map((format) => (
-                      <option key={format} value={format}>
-                        {format.toUpperCase()}
-                      </option>
-                    ))}
-                  </select>
+            <div className="grid min-h-48 place-items-center gap-4 text-center">
+              <UploadCloud className="h-10 w-10 text-primary" />
+              {selectedFile ? (
+                <div className="space-y-1">
+                  <p className="text-base font-medium text-foreground">{selectedFile.name}</p>
+                  <p className="text-sm text-muted-foreground">{formatFileSize(selectedFile.size)}</p>
                 </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="quality-select">Quality</Label>
-                  <select
-                    id="quality-select"
-                    className="h-10 w-full rounded-xl border border-border bg-background px-3 text-sm"
-                    value={quality}
-                    onChange={(event) => setQuality(event.target.value as QualityLevel)}
-                  >
-                    <option value="low">Low</option>
-                    <option value="medium">Medium</option>
-                    <option value="high">High</option>
-                  </select>
+              ) : (
+                <div className="space-y-1">
+                  <p className="text-base font-medium text-foreground">Tap to upload file</p>
+                  <p className="text-sm text-muted-foreground">or drag and drop</p>
                 </div>
-              </div>
-
-              <Button className="h-10 w-full rounded-2xl" disabled={!canConvert} onClick={handleConvert}>
-                Convert
-              </Button>
-            </>
+              )}
+            </div>
           )}
 
           {state === "uploading" && (
-            <div className="space-y-4 py-4">
-              <p className="text-base">Uploading...</p>
-              <div className="h-1.5 w-full rounded-full bg-muted">
-                <div
-                  className="h-1.5 rounded-full bg-primary transition-all"
-                  style={{ width: `${uploadPercent}%` }}
-                />
+            <div className="grid min-h-48 place-items-center gap-4 text-center">
+              <div className="h-10 w-10 animate-spin rounded-full border-4 border-muted border-t-primary" />
+              <div className="space-y-1">
+                <p className="text-base font-medium text-foreground">Uploading...</p>
+                <p className="text-sm text-muted-foreground">Uploading chunks {uploadPercent}%</p>
               </div>
-              <p className="text-sm text-muted-foreground">{uploadPercent}%</p>
             </div>
           )}
 
           {state === "processing" && (
-            <div className="space-y-4 py-4">
-              <p className="text-base">Converting...</p>
-              <div className="h-1.5 w-full rounded-full bg-muted">
+            <div className="grid min-h-48 gap-5 py-6">
+              <p className="text-center text-base font-medium text-foreground">Converting...</p>
+              <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
                 <div
-                  className="h-1.5 rounded-full bg-accent transition-all"
+                  className="h-full rounded-full bg-primary transition-all duration-300"
                   style={{ width: `${conversionPercent}%` }}
                 />
               </div>
-              <p className="text-sm text-muted-foreground">{conversionPercent}%</p>
+              <p className="text-center text-sm text-muted-foreground">{conversionPercent}%</p>
             </div>
           )}
 
           {state === "completed" && (
-            <div className="space-y-4">
-              <p className="text-base font-medium">Conversion completed</p>
+            <div className="grid min-h-48 place-items-center gap-4 text-center">
+              <div className="space-y-1">
+                <p className="text-lg font-semibold text-foreground">Conversion Complete</p>
+                <p className="text-sm text-muted-foreground">
+                  {selectedFile ? `${selectedFile.name.split(".")[0]}.${outputFormat}` : "Converted file ready"}
+                </p>
+              </div>
               {jobId && (
                 <a
                   href={`${env.NEXT_PUBLIC_SERVER_URL}/download/${jobId}`}
-                  className="inline-flex h-10 items-center justify-center rounded-2xl bg-primary px-4 text-sm font-medium text-primary-foreground"
+                  className="inline-flex h-11 items-center justify-center rounded-2xl bg-primary px-6 text-sm font-semibold text-primary-foreground"
                 >
-                  Download File
+                  Download
                 </a>
               )}
             </div>
           )}
 
           {state === "error" && (
-            <div className="space-y-4">
-              <p className="text-sm text-red-500">{errorMessage ?? "Conversion failed."}</p>
-              <Button variant="outline" className="h-10 rounded-2xl" onClick={handleRetry}>
-                Retry
+            <div className="grid min-h-48 place-items-center gap-4 text-center">
+              <div className="space-y-1">
+                <p className="text-lg font-semibold text-destructive">Something went wrong</p>
+                <p className="text-sm text-muted-foreground">{errorMessage ?? "Please try again."}</p>
+              </div>
+              <Button variant="outline" className="h-11 rounded-2xl px-6" onClick={handleRetry}>
+                Try Again
               </Button>
             </div>
           )}
+        </Card>
 
-          {errorMessage && state !== "error" ? (
-            <p className="text-sm text-red-500">{errorMessage}</p>
-          ) : null}
-        </div>
-      </Card>
-
-      <Card className="rounded-2xl bg-card p-4">
-        <div className="space-y-3">
-          <h2 className="text-lg font-semibold">Recent</h2>
-          {recentItems.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No conversions yet.</p>
-          ) : (
-            <ul className="space-y-2">
-              {recentItems.map((item) => (
-                <li key={item.id} className="rounded-xl border border-border p-2 text-sm">
-                  <p className="font-medium">{item.inputName}</p>
-                  <p className="text-muted-foreground">
-                    {item.outputFormat.toUpperCase()} · {item.quality}
-                  </p>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      </Card>
-
-      <Card className="rounded-2xl bg-card p-4">
-        <div className="space-y-3">
-          <h2 className="text-lg font-semibold">Presets</h2>
-          <div className="grid gap-2 md:grid-cols-2">
-            {PROFILE_PRESETS.map((preset) => (
-              <a
-                key={preset.id}
-                href={`/convert/${preset.id}`}
-                className="rounded-xl border border-border p-2 text-sm"
+        <section className="grid gap-3">
+          <p className="text-sm font-medium text-foreground">Convert to</p>
+          <div className="flex flex-wrap gap-2">
+            {allowedFormats.length === 0 && (
+              <span className="text-sm text-muted-foreground">Select a file to view formats</span>
+            )}
+            {allowedFormats.map((format) => (
+              <button
+                key={format}
+                type="button"
+                disabled={!selectedFile || isLocked}
+                onClick={() => setOutputFormat(format)}
+                className={`rounded-xl px-4 py-2 text-sm font-medium transition ${
+                  outputFormat === format
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-secondary text-foreground hover:bg-muted"
+                } disabled:cursor-not-allowed disabled:opacity-50`}
               >
-                <p className="font-medium">{preset.label}</p>
-                <p className="text-muted-foreground">{preset.description}</p>
-              </a>
+                {format.toUpperCase()}
+              </button>
             ))}
           </div>
-        </div>
-      </Card>
-    </div>
+        </section>
+
+        {state !== "completed" && state !== "error" && (
+          <Button
+            className="h-12 rounded-2xl text-sm font-semibold"
+            disabled={!canConvert || isLocked}
+            onClick={handleConvert}
+          >
+            {ctaText}
+          </Button>
+        )}
+
+        {errorMessage && state !== "error" ? (
+          <p className="text-sm text-destructive">{errorMessage}</p>
+        ) : null}
+      </div>
+    </main>
   );
 }

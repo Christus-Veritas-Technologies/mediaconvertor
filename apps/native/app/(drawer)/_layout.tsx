@@ -18,14 +18,32 @@ function DrawerLayout() {
           color: themeColorForeground,
         },
         drawerStyle: { backgroundColor: themeColorBackground },
+        drawerActiveTintColor: "#7c3aed",
+        drawerInactiveTintColor: themeColorForeground,
       }}
     >
       <Drawer.Screen
         name="index"
         options={{
-          headerTitle: "Converter",
+          headerTitle: "Dashboard",
           drawerLabel: ({ color, focused }) => (
-            <Text style={{ color: focused ? color : themeColorForeground }}>Converter</Text>
+            <Text style={{ color: focused ? color : themeColorForeground }}>Dashboard</Text>
+          ),
+          drawerIcon: ({ size, color, focused }) => (
+            <Ionicons
+              name="home-outline"
+              size={size}
+              color={focused ? color : themeColorForeground}
+            />
+          ),
+        }}
+      />
+      <Drawer.Screen
+        name="conversions"
+        options={{
+          headerTitle: "Conversions",
+          drawerLabel: ({ color, focused }) => (
+            <Text style={{ color: focused ? color : themeColorForeground }}>Conversions</Text>
           ),
           drawerIcon: ({ size, color, focused }) => (
             <Ionicons
@@ -39,13 +57,45 @@ function DrawerLayout() {
       <Drawer.Screen
         name="recent"
         options={{
-          headerTitle: "Recent",
+          headerTitle: "History",
           drawerLabel: ({ color, focused }) => (
-            <Text style={{ color: focused ? color : themeColorForeground }}>Recent</Text>
+            <Text style={{ color: focused ? color : themeColorForeground }}>History</Text>
           ),
           drawerIcon: ({ size, color, focused }) => (
             <MaterialIcons
               name="history"
+              size={size}
+              color={focused ? color : themeColorForeground}
+            />
+          ),
+        }}
+      />
+      <Drawer.Screen
+        name="settings"
+        options={{
+          headerTitle: "Settings",
+          drawerLabel: ({ color, focused }) => (
+            <Text style={{ color: focused ? color : themeColorForeground }}>Settings</Text>
+          ),
+          drawerIcon: ({ size, color, focused }) => (
+            <Ionicons
+              name="settings-outline"
+              size={size}
+              color={focused ? color : themeColorForeground}
+            />
+          ),
+        }}
+      />
+      <Drawer.Screen
+        name="support"
+        options={{
+          headerTitle: "Support",
+          drawerLabel: ({ color, focused }) => (
+            <Text style={{ color: focused ? color : themeColorForeground }}>Support</Text>
+          ),
+          drawerIcon: ({ size, color, focused }) => (
+            <Ionicons
+              name="help-circle-outline"
               size={size}
               color={focused ? color : themeColorForeground}
             />

@@ -1,11 +1,11 @@
 import {
   detectMediaKind,
+  getFileExtension,
   getAllowedOutputs,
   startConversion,
   type ConversionFile,
   type ConversionState,
   type OutputFormat,
-  type QualityLevel,
 } from "@MediaConvertor/conversion";
 import { env } from "@MediaConvertor/env/native";
 import * as DocumentPicker from "expo-document-picker";
@@ -17,12 +17,18 @@ import { ActivityIndicator, Pressable, Text, View } from "react-native";
 import { Container } from "@/components/container";
 import { saveRecentItem as saveRecentToDb } from "@/lib/recent-store";
 
+const MAX_VISIBLE_FORMATS = 8;
+const DEFAULT_FORMAT_BY_INPUT: Record<string, OutputFormat> = {
+  mp4: "mp3",
+  mkv: "mp4",
+  wav: "mp3",
+};
+
 export default function Home() {
   const [state, setState] = useState<ConversionState>("idle");
   const [selectedFile, setSelectedFile] = useState<ConversionFile | null>(null);
   const [mediaKind, setMediaKind] = useState<"audio" | "video" | null>(null);
   const [outputFormat, setOutputFormat] = useState<OutputFormat | null>(null);
-  const [quality, setQuality] = useState<QualityLevel>("medium");
   const [uploadPercent, setUploadPercent] = useState(0);
   const [conversionPercent, setConversionPercent] = useState(0);
   const [jobId, setJobId] = useState<string | null>(null);
@@ -32,13 +38,43 @@ export default function Home() {
     if (!mediaKind) {
       return [] as readonly OutputFormat[];
     }
-    return getAllowedOutputs(mediaKind);
+    return getAllowedOutputs(mediaKind).slice(0, MAX_VISIBLE_FORMATS);
   }, [mediaKind]);
 
+  const isLocked = state === "uploading" || state === "processing";
+
   const canConvert =
-    state === "idle" && selectedFile !== null && outputFormat !== null && allowedFormats.includes(outputFormat);
+    state === "idle" &&
+    !isLocked &&
+    selectedFile !== null &&
+    outputFormat !== null &&
+    allowedFormats.includes(outputFormat);
+
+  function smartSelectFormat(fileName: string, options: readonly OutputFormat[]): OutputFormat | null {
+    if (options.length === 0) {
+      return null;
+    }
+
+    const extension = getFileExtension(fileName);
+    const mapped = DEFAULT_FORMAT_BY_INPUT[extension];
+
+    if (mapped && options.includes(mapped)) {
+      return mapped;
+    }
+
+    return options[0] ?? null;
+  }
+
+  function formatFileSize(size: number): string {
+    const mb = size / (1024 * 1024);
+    return `${mb.toFixed(1)} MB`;
+  }
 
   async function handlePickFile() {
+    if (isLocked) {
+      return;
+    }
+
     const picked = await DocumentPicker.getDocumentAsync({
       multiple: false,
       type: ["audio/*", "video/*"],
@@ -67,7 +103,11 @@ export default function Home() {
 
       setSelectedFile(file);
       setMediaKind(kind);
-      setOutputFormat(nextFormats[0] ?? null);
+      setOutputFormat(smartSelectFormat(file.name, nextFormats.slice(0, MAX_VISIBLE_FORMATS)));
+      setState("idle");
+      setUploadPercent(0);
+      setConversionPercent(0);
+      setJobId(null);
       setErrorMessage(null);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Failed to read file.");
@@ -75,7 +115,7 @@ export default function Home() {
   }
 
   async function handleConvert() {
-    if (!selectedFile || !outputFormat) {
+    if (!selectedFile || !outputFormat || isLocked) {
       return;
     }
 
@@ -85,7 +125,7 @@ export default function Home() {
           file: selectedFile,
           selection: {
             outputFormat,
-            quality,
+            quality: "medium",
           },
         },
         {
@@ -102,6 +142,7 @@ export default function Home() {
       );
 
       setState(result.state);
+
       if (result.state === "completed" && result.success) {
         setJobId(result.success.jobId);
         saveRecentToDb({
@@ -109,7 +150,7 @@ export default function Home() {
           inputName: selectedFile.name,
           outputName: `converted-${result.success.jobId}.${outputFormat}`,
           outputFormat,
-          quality,
+          quality: "medium",
           sizeBytes: result.success.sizeBytes,
           createdAt: new Date().toISOString(),
         });
@@ -145,114 +186,120 @@ export default function Home() {
     setConversionPercent(0);
   }
 
+  const ctaText =
+    state === "uploading"
+      ? "Uploading..."
+      : state === "processing"
+        ? "Converting..."
+        : "Convert Now";
+
   return (
     <Container className="px-4" isScrollable={false}>
-      <View className="flex-1 py-4 space-y-4">
-        <View className="space-y-1">
-          <Text className="text-xl font-semibold text-foreground">MediaConvertor</Text>
-          <Text className="text-sm text-muted">Single-screen conversion workflow</Text>
+      <View className="flex-1 py-6">
+        <View className="mb-4 space-y-1">
+          <Text className="text-2xl font-semibold text-foreground">Convert your video or audio</Text>
+          <Text className="text-sm text-muted">Upload, convert, and download in one flow.</Text>
         </View>
 
-        <View className="rounded-2xl bg-secondary p-4 space-y-4">
+        <View className="mb-4 rounded-2xl border border-border bg-card p-4">
           {state === "idle" && (
-            <>
-              <Pressable className="rounded-2xl bg-primary py-4 items-center" onPress={handlePickFile}>
-                <Text className="text-sm font-semibold text-primary-foreground">
-                  {selectedFile ? "Change File" : "Pick File"}
-                </Text>
-              </Pressable>
-
+            <Pressable className="min-h-40 items-center justify-center rounded-2xl bg-secondary px-4" onPress={handlePickFile}>
               {selectedFile ? (
-                <Text className="text-sm text-foreground">{selectedFile.name}</Text>
+                <View className="items-center gap-1">
+                  <Text className="text-base font-medium text-foreground">{selectedFile.name}</Text>
+                  <Text className="text-sm text-muted">{formatFileSize(selectedFile.size)}</Text>
+                </View>
               ) : (
-                <Text className="text-sm text-muted">No file selected</Text>
+                <View className="items-center gap-1">
+                  <Text className="text-base font-medium text-foreground">Tap to upload file</Text>
+                  <Text className="text-sm text-muted">Choose video or audio file</Text>
+                </View>
               )}
-
-              <View className="space-y-2">
-                <Text className="text-sm text-foreground">Output Format</Text>
-                <View className="flex-row flex-wrap gap-2">
-                  {allowedFormats.map((format) => (
-                    <Pressable
-                      key={format}
-                      className={`rounded-xl px-3 py-2 ${outputFormat === format ? "bg-primary" : "bg-background"}`}
-                      onPress={() => setOutputFormat(format)}
-                      disabled={!selectedFile}
-                    >
-                      <Text
-                        className={`text-sm ${outputFormat === format ? "text-primary-foreground" : "text-foreground"}`}
-                      >
-                        {format.toUpperCase()}
-                      </Text>
-                    </Pressable>
-                  ))}
-                </View>
-              </View>
-
-              <View className="space-y-2">
-                <Text className="text-sm text-foreground">Quality</Text>
-                <View className="flex-row gap-2">
-                  {(["low", "medium", "high"] as const).map((value) => (
-                    <Pressable
-                      key={value}
-                      className={`rounded-xl px-3 py-2 ${quality === value ? "bg-primary" : "bg-background"}`}
-                      onPress={() => setQuality(value)}
-                    >
-                      <Text className={quality === value ? "text-primary-foreground text-sm" : "text-foreground text-sm"}>
-                        {value}
-                      </Text>
-                    </Pressable>
-                  ))}
-                </View>
-              </View>
-
-              <Pressable
-                className={`rounded-2xl py-4 items-center ${canConvert ? "bg-primary" : "bg-muted"}`}
-                disabled={!canConvert}
-                onPress={handleConvert}
-              >
-                <Text className="text-sm font-semibold text-primary-foreground">Convert</Text>
-              </Pressable>
-            </>
+            </Pressable>
           )}
 
           {state === "uploading" && (
-            <View className="space-y-3 py-4">
+            <View className="min-h-40 items-center justify-center gap-3">
               <ActivityIndicator />
               <Text className="text-base text-foreground">Uploading...</Text>
-              <Text className="text-sm text-muted">{uploadPercent}%</Text>
+              <Text className="text-sm text-muted">Uploading chunks {uploadPercent}%</Text>
             </View>
           )}
 
           {state === "processing" && (
-            <View className="space-y-3 py-4">
+            <View className="min-h-40 items-center justify-center gap-3">
               <ActivityIndicator />
               <Text className="text-base text-foreground">Converting...</Text>
+              <View className="h-2 w-full overflow-hidden rounded-full bg-muted">
+                <View
+                  className="h-2 rounded-full bg-primary"
+                  style={{ width: `${conversionPercent}%` }}
+                />
+              </View>
               <Text className="text-sm text-muted">{conversionPercent}%</Text>
             </View>
           )}
 
           {state === "completed" && (
-            <View className="space-y-3 py-2">
-              <Text className="text-base font-semibold text-foreground">Conversion completed</Text>
-              <Pressable className="rounded-2xl bg-primary py-4 items-center" onPress={handleShare}>
-                <Text className="text-sm font-semibold text-primary-foreground">Download & Share</Text>
+            <View className="min-h-40 items-center justify-center gap-3">
+              <Text className="text-lg font-semibold text-foreground">Conversion Complete</Text>
+              <Text className="text-sm text-muted">
+                {selectedFile ? `${selectedFile.name.split(".")[0]}.${outputFormat}` : "Converted file ready"}
+              </Text>
+              <Pressable className="items-center rounded-2xl bg-primary px-5 py-3" onPress={handleShare}>
+                <Text className="text-sm font-semibold text-primary-foreground">Share</Text>
               </Pressable>
             </View>
           )}
 
           {state === "error" && (
-            <View className="space-y-3 py-2">
-              <Text className="text-sm text-danger">{errorMessage ?? "Conversion failed."}</Text>
-              <Pressable className="rounded-2xl bg-warning py-4 items-center" onPress={handleRetry}>
-                <Text className="text-sm font-semibold text-foreground">Retry</Text>
+            <View className="min-h-40 items-center justify-center gap-3">
+              <Text className="text-base font-semibold text-danger">Something went wrong</Text>
+              <Text className="text-sm text-muted">{errorMessage ?? "Please try again."}</Text>
+              <Pressable className="items-center rounded-2xl bg-warning px-5 py-3" onPress={handleRetry}>
+                <Text className="text-sm font-semibold text-foreground">Try Again</Text>
               </Pressable>
             </View>
           )}
-
-          {errorMessage && state !== "error" ? (
-            <Text className="text-sm text-danger">{errorMessage}</Text>
-          ) : null}
         </View>
+
+        <View className="mb-4">
+          <Text className="mb-2 text-sm font-medium text-foreground">Convert to</Text>
+          <View className="flex-row flex-wrap gap-2">
+            {allowedFormats.length === 0 ? (
+              <Text className="text-sm text-muted">Select a file to view formats</Text>
+            ) : (
+              allowedFormats.map((format) => (
+                <Pressable
+                  key={format}
+                  className={`rounded-xl px-3 py-2 ${outputFormat === format ? "bg-primary" : "bg-secondary"}`}
+                  onPress={() => setOutputFormat(format)}
+                  disabled={!selectedFile || isLocked}
+                >
+                  <Text
+                    className={`text-sm font-medium ${outputFormat === format ? "text-primary-foreground" : "text-foreground"}`}
+                  >
+                    {format.toUpperCase()}
+                  </Text>
+                </Pressable>
+              ))
+            )}
+          </View>
+        </View>
+
+        {state !== "completed" && state !== "error" && (
+          <Pressable
+            className={`items-center rounded-2xl py-4 ${canConvert ? "bg-primary" : "bg-muted"}`}
+            disabled={!canConvert}
+            onPress={handleConvert}
+          >
+            <Text className="text-sm font-semibold text-primary-foreground">{ctaText}</Text>
+          </Pressable>
+        )}
+
+        {errorMessage && state !== "error" ? (
+          <Text className="mt-3 text-sm text-danger">{errorMessage}</Text>
+        ) : null}
       </View>
     </Container>
   );

@@ -33,8 +33,15 @@ const DEFAULT_FORMAT_BY_INPUT: Record<string, OutputFormat> = {
   jpeg: "png",
 };
 
+type DefaultConverterConfig = {
+  inputFormat?: string;
+  outputFormat: OutputFormat;
+  lockedOutput?: boolean;
+};
+
 type ConverterScreenProps = {
   presetId?: string;
+  defaultConfig?: DefaultConverterConfig;
 };
 
 function readRecentFromStorage(): RecentItem[] {
@@ -81,7 +88,7 @@ function smartSelectFormat(fileName: string, options: readonly OutputFormat[]): 
   return options[0] ?? null;
 }
 
-export default function ConverterScreen({ presetId }: ConverterScreenProps) {
+export default function ConverterScreen({ presetId, defaultConfig }: ConverterScreenProps) {
   const [state, setState] = useState<ConversionState>("idle");
   const [selectedFile, setSelectedFile] = useState<ConversionFile | null>(null);
   const [outputFormat, setOutputFormat] = useState<OutputFormat | null>(null);
@@ -111,6 +118,7 @@ export default function ConverterScreen({ presetId }: ConverterScreenProps) {
     return getSupportedOutputsForInputExtension(extension);
   }, [selectedFile]);
 
+  const isFormatLocked = !!defaultConfig?.lockedOutput;
   const isLocked = state === "uploading" || state === "processing";
 
   useEffect(() => {
@@ -126,9 +134,14 @@ export default function ConverterScreen({ presetId }: ConverterScreenProps) {
     if (!activePreset) {
       return;
     }
-
     setOutputFormat(activePreset.outputFormat);
   }, [activePreset]);
+
+  useEffect(() => {
+    if (defaultConfig?.outputFormat) {
+      setOutputFormat(defaultConfig.outputFormat);
+    }
+  }, [defaultConfig?.outputFormat]);
 
   async function applySelectedFile(file: File) {
     if (isLocked) {
@@ -273,12 +286,15 @@ export default function ConverterScreen({ presetId }: ConverterScreenProps) {
 
   const canConvert = state === "idle" && !!selectedFile && !!outputFormat && !isLocked;
 
+  const lockedOutputLabel = defaultConfig?.outputFormat?.toUpperCase() ?? "";
   const ctaText =
     state === "uploading"
       ? "Uploading..."
       : state === "processing"
         ? "Converting..."
-        : "Convert Now";
+        : isFormatLocked
+          ? `Convert to ${lockedOutputLabel}`
+          : "Convert Now";
 
   return (
     <main className="mx-auto flex h-full w-full max-w-5xl flex-col justify-start px-4 py-8">
@@ -448,34 +464,48 @@ export default function ConverterScreen({ presetId }: ConverterScreenProps) {
           </Card>
         </motion.div>
 
-        <section className="grid gap-3">
-          <p className="text-sm font-medium text-foreground">Convert to</p>
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-            {formatCards.map((format) => {
-              const isSupported = !selectedFile || supportedOutputs.includes(format);
-              const isSelected = outputFormat === format;
+        {isFormatLocked ? (
+          <section className="grid gap-3">
+            <p className="text-sm font-medium text-foreground">
+              {defaultConfig?.inputFormat
+                ? `Convert ${defaultConfig.inputFormat.toUpperCase()} to ${lockedOutputLabel}`
+                : `Convert to ${lockedOutputLabel}`}
+            </p>
+            <div className="rounded-2xl border border-primary/30 bg-primary/5 px-4 py-3">
+              <span className="block text-xs uppercase tracking-wide text-muted-foreground">Output format</span>
+              <span className="block text-base font-semibold text-foreground">{lockedOutputLabel}</span>
+            </div>
+          </section>
+        ) : (
+          <section className="grid gap-3">
+            <p className="text-sm font-medium text-foreground">Convert to</p>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+              {formatCards.map((format) => {
+                const isSupported = !selectedFile || supportedOutputs.includes(format);
+                const isSelected = outputFormat === format;
 
-              return (
-                <button
-                  key={format}
-                  type="button"
-                  disabled={isLocked}
-                  onClick={() => handleFormatSelect(format)}
-                  className={`rounded-2xl border px-4 py-3 text-left text-sm font-medium transition ${
-                    isSelected
-                      ? "border-primary bg-primary text-primary-foreground"
-                      : isSupported
-                        ? "border-border bg-card text-foreground hover:border-primary/40"
-                        : "border-border bg-muted text-muted-foreground"
-                  } disabled:cursor-not-allowed disabled:opacity-60`}
-                >
-                  <span className="block text-xs uppercase tracking-wide">Convert to</span>
-                  <span className="block text-base font-semibold">{format.toUpperCase()}</span>
-                </button>
-              );
-            })}
-          </div>
-        </section>
+                return (
+                  <button
+                    key={format}
+                    type="button"
+                    disabled={isLocked}
+                    onClick={() => handleFormatSelect(format)}
+                    className={`rounded-2xl border px-4 py-3 text-left text-sm font-medium transition ${
+                      isSelected
+                        ? "border-primary bg-primary text-primary-foreground"
+                        : isSupported
+                          ? "border-border bg-card text-foreground hover:border-primary/40"
+                          : "border-border bg-muted text-muted-foreground"
+                    } disabled:cursor-not-allowed disabled:opacity-60`}
+                  >
+                    <span className="block text-xs uppercase tracking-wide">Convert to</span>
+                    <span className="block text-base font-semibold">{format.toUpperCase()}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+        )}
 
         {state !== "completed" && state !== "error" && (
           <Button

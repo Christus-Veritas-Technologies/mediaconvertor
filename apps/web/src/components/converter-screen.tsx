@@ -164,7 +164,7 @@ export default function ConverterScreen({ presetId, defaultConfig }: ConverterSc
     setOutputFormat(activePreset.outputFormat);
   }, [activePreset]);
 
-  useEffect(() => {
+  useEffect(() => { 
     if (defaultConfig?.outputFormat) {
       setOutputFormat(defaultConfig.outputFormat);
     }

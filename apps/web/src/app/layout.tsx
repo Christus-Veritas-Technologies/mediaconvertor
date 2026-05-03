@@ -14,6 +14,9 @@ const poppins = Poppins({
 export const metadata: Metadata = {
   title: "MediaConvertor",
   description: "MediaConvertor",
+  other: {
+    "google-adsense-account": "ca-pub-6071419245494198",
+  },
 };
 
 export default function RootLayout({
@@ -23,6 +26,13 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
+      <head>
+        <script
+          async
+          src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-6071419245494198"
+          crossOrigin="anonymous"
+        />
+      </head>
       <body className={`${poppins.variable} antialiased`}>
         <Providers>
           <div className="grid h-svh grid-rows-[auto_1fr]">

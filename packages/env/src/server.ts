@@ -4,7 +4,7 @@ import { z } from "zod";
 
 export const env = createEnv({
   server: {
-    CORS_ORIGIN: z.url(),
+    CORS_ORIGIN: z.url().optional(),
     FFMPEG_PATH: z.string().default("ffmpeg"),
     FFPROBE_PATH: z.string().default("ffprobe"),
     MAX_CONCURRENT_JOBS: z.coerce.number().int().min(1).max(10).default(2),

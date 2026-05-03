@@ -433,7 +433,7 @@ export default function ConverterScreen({ presetId, defaultConfig }: ConverterSc
                   </div>
                   <div className="space-y-1">
                     <p className="text-lg font-semibold text-white">Uploading...</p>
-                    <p className="text-sm text-white/80">Uploading chunks {uploadPercent}%</p>
+                    <p className="text-sm text-white/80">Uploading...</p>
                   </div>
                 </motion.div>
               )}

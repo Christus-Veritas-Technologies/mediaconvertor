@@ -256,7 +256,7 @@ export default function Home() {
             <View className="min-h-40 items-center justify-center gap-3">
               <ActivityIndicator />
               <Text className="text-base text-foreground">Uploading...</Text>
-              <Text className="text-sm text-muted">Uploading chunks {uploadPercent}%</Text>
+              <Text className="text-sm text-muted">Uploading...</Text>
             </View>
           )}
 

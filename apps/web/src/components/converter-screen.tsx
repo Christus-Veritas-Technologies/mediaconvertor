@@ -18,7 +18,16 @@ import { env } from "@MediaConvertor/env/web";
 import { AnimatePresence, motion } from "framer-motion";
 import { Button } from "@MediaConvertor/ui/components/button";
 import { Card } from "@MediaConvertor/ui/components/card";
-import { Cloud, Download, Music, Film, Image as ImageIcon } from "lucide-react";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  Cloud,
+  Download,
+  Film,
+  Image as ImageIcon,
+  Loader2,
+  Music,
+} from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 const RECENT_KEY = "recent_conversions";
@@ -419,10 +428,12 @@ export default function ConverterScreen({ presetId, defaultConfig }: ConverterSc
                   transition={{ duration: 0.2 }}
                   className="grid min-h-48 place-items-center gap-4 text-center"
                 >
-                  <div className="h-10 w-10 animate-spin rounded-full border-4 border-muted border-t-primary" />
+                  <div className="flex h-16 w-16 items-center justify-center rounded-full bg-white/20">
+                    <Loader2 className="h-8 w-8 animate-spin text-white" />
+                  </div>
                   <div className="space-y-1">
-                    <p className="text-base font-medium text-foreground">Uploading...</p>
-                    <p className="text-sm text-muted-foreground">Uploading chunks {uploadPercent}%</p>
+                    <p className="text-lg font-semibold text-white">Uploading...</p>
+                    <p className="text-sm text-white/80">Uploading chunks {uploadPercent}%</p>
                   </div>
                 </motion.div>
               )}
@@ -434,17 +445,15 @@ export default function ConverterScreen({ presetId, defaultConfig }: ConverterSc
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -8 }}
                   transition={{ duration: 0.2 }}
-                  className="grid min-h-48 gap-5 py-6"
+                  className="grid min-h-48 place-items-center gap-4 text-center"
                 >
-                  <p className="text-center text-base font-medium text-foreground">Converting...</p>
-                  <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
-                    <motion.div
-                      className="h-full rounded-full bg-primary"
-                      animate={{ width: `${conversionPercent}%` }}
-                      transition={{ duration: 0.2 }}
-                    />
+                  <div className="flex h-16 w-16 items-center justify-center rounded-full bg-white/20">
+                    <Loader2 className="h-8 w-8 animate-spin text-white" />
                   </div>
-                  <p className="text-center text-sm text-muted-foreground">{conversionPercent}%</p>
+                  <div className="space-y-1">
+                    <p className="text-lg font-semibold text-white">Converting...</p>
+                    <p className="text-sm text-white/80">This usually takes a few seconds</p>
+                  </div>
                 </motion.div>
               )}
 
@@ -457,16 +466,19 @@ export default function ConverterScreen({ presetId, defaultConfig }: ConverterSc
                   transition={{ duration: 0.2 }}
                   className="grid min-h-48 place-items-center gap-4 text-center"
                 >
+                  <div className="flex h-16 w-16 items-center justify-center rounded-full bg-white/20">
+                    <CheckCircle2 className="h-8 w-8 text-white" />
+                  </div>
                   <div className="space-y-1">
-                    <p className="text-lg font-semibold text-foreground">Conversion Complete</p>
-                    <p className="text-sm text-muted-foreground">
+                    <p className="text-lg font-semibold text-white">Conversion Complete</p>
+                    <p className="text-sm text-white/80">
                       {selectedFile ? `${selectedFile.name.split(".")[0]}.${outputFormat}` : "Converted file ready"}
                     </p>
                   </div>
                   {jobId && (
                     <a
                       href={`${env.NEXT_PUBLIC_SERVER_URL}/download/${jobId}`}
-                      className="inline-flex h-11 items-center justify-center rounded-2xl bg-primary px-6 text-sm font-semibold text-primary-foreground"
+                      className="inline-flex h-11 items-center justify-center rounded-2xl bg-white px-6 text-sm font-semibold text-purple-700 transition hover:bg-white/90"
                     >
                       Download
                     </a>
@@ -483,11 +495,14 @@ export default function ConverterScreen({ presetId, defaultConfig }: ConverterSc
                   transition={{ duration: 0.2 }}
                   className="grid min-h-48 place-items-center gap-4 text-center"
                 >
-                  <div className="space-y-1">
-                    <p className="text-lg font-semibold text-destructive">Something went wrong</p>
-                    <p className="text-sm text-muted-foreground">{errorMessage ?? "Please try again."}</p>
+                  <div className="flex h-16 w-16 items-center justify-center rounded-full bg-white/20">
+                    <AlertTriangle className="h-8 w-8 text-white" />
                   </div>
-                  <Button variant="outline" className="h-11 rounded-2xl px-6" onClick={handleRetry}>
+                  <div className="space-y-1">
+                    <p className="text-lg font-semibold text-white">Something went wrong</p>
+                    <p className="text-sm text-white/80">{errorMessage ?? "Please try again."}</p>
+                  </div>
+                  <Button className="h-11 rounded-2xl bg-white px-6 text-sm font-semibold text-purple-700 hover:bg-white/90" onClick={handleRetry}>
                     Try Again
                   </Button>
                 </motion.div>
